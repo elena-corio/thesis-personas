@@ -27,6 +27,7 @@ pass/fail and dropped.
 
 import argparse
 import csv
+import difflib
 import json
 import re
 import sys
@@ -164,17 +165,23 @@ def find_option(question, text, lang):
     return None
 
 
+def as_items(text):
+    """The export separates choices with ";", and a label may itself contain ";" or ",":
+    both cell and labels are compared with every ";" written as ", "."""
+    return re.sub(r"\s*;\s*", ", ", text.strip())
+
+
 def match_labels(question, cell, lang):
     """Multi-select: -> (codes in codebook order, leftover text or None). Longest labels first."""
     if not cell.strip():
         return [], None
-    cell = re.sub(r"\s*;\s*", ", ", cell.strip())
+    cell = as_items(cell)
     rest = ", " + norm(cell) + ", "
     found = []
     for opt in sorted(question.get("options", []), key=lambda o: len(o[lang]), reverse=True):
         if opt["code"] == "other":
             continue  # "Other" arrives as the typed text, never as the label
-        label = ", " + norm(opt[lang]) + ", "
+        label = ", " + norm(as_items(opt[lang])) + ", "
         if label in rest:
             found.append(opt["code"])
             rest = rest.replace(label, ", ", 1)
@@ -189,6 +196,13 @@ def match_labels(question, cell, lang):
 
 def has_other(question):
     return any(o["code"] == "other" for o in question.get("options", []))
+
+
+def near_option(question, text, lang, cutoff=0.8):
+    """An option whose label is almost the given text: a form/codebook wording mismatch, not a real 'Other'."""
+    labels = {norm(o[lang]): o["code"] for o in question.get("options", []) if o["code"] != "other"}
+    close = difflib.get_close_matches(norm(text), labels, n=1, cutoff=cutoff)
+    return (labels[close[0]], close[0]) if close else None
 
 
 def parse_int(cell):
@@ -256,6 +270,9 @@ def parse_row(row, mapping, codebook, lang, pid, log):
                     leftover = None
             if leftover:
                 other_text[qid] = leftover
+                near = near_option(q, leftover, lang)
+                if near:
+                    log["near"].append((pid, qid, leftover, near[0], near[1]))
                 if has_other(q):
                     log["other"].append((pid, qid, leftover))
                 else:
@@ -314,7 +331,7 @@ def build_participants(sources, codebook):
     submissions.sort(key=lambda s: s[0])
 
     expected_check = codebook["part_a"]["Q14"]["attention_check"]["expected"]
-    log = {"unmatched": [], "other": [], "remapped": []}
+    log = {"unmatched": [], "other": [], "remapped": [], "near": []}
     participants = []
     for n, (_, lang, mapping, row) in enumerate(submissions, start=1):
         pid = f"P{n:02d}"
@@ -395,6 +412,11 @@ def main():
           + "".join(f"\n  - {pid} {q}: {t!r}" for pid, q, t in log["other"]))
     print(f"Answers not matching an option: {len(log['unmatched'])}"
           + "".join(f"\n  - {pid} {q}: {t!r} ({why})" for pid, q, t, why in log["unmatched"]))
+    if log["near"]:
+        print(f"⚠ Probably a form/codebook wording mismatch, not a real 'Other' ({len(log['near'])}): "
+              "fix the codebook label to the exact form text, or add a remap")
+        for pid, q, t, code, label in log["near"]:
+            print(f"  - {pid} {q}: {t!r} is close to option {code} {label!r}")
 
 
 if __name__ == "__main__":

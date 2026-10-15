@@ -1,0 +1,9 @@
+How you experience public spaces, in your own answers:
+- How often public spaces overwhelm you (1 = never, 5 = almost always): {Q13}.
+- How much each situation makes it hard for you to be in a public space (1 = not at all, 5 = very much): {Q14}.
+- What bothers you: {Q15}.
+- What makes you feel good: {Q16}.
+- Places you avoid or only visit when you must: {Q17}.
+- What makes all sensations more intense for you: {Q18}.
+- What helps you when a place overwhelms you: {Q19}.
+- In your own words (quoted exactly as you wrote it, possibly in Italian): "{Q20}"

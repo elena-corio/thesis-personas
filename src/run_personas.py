@@ -4,11 +4,12 @@
     python src/run_personas.py                           # new run -> runs/<run_id>/calls.jsonl
     python src/run_personas.py --resume runs/<run_id>    # add the calls still missing in that run
     python src/run_personas.py --resume runs/<run_id> --versions V3   # add a version to an existing run
+    (--study pilot2 is the default; config, prompts, photos and data come from the study folders)
 
 One call per participant x version x place x run, each a fresh conversation:
 system prompt, then a user message with the persona text, the task text and the
 photo. Calls are ordered run by run, so a run stopped early still has every
-condition equally covered. B4-B7 options are shuffled in every call ("None…",
+condition equally covered. B4-B6 options are shuffled in every call ("None…",
 "No change needed" and "Other" stay last); the shuffle seed comes from the run id
 and the call, so a resumed run shows the same order, and the order is logged.
 
@@ -44,13 +45,11 @@ from PIL import Image
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import build_personas as bp  # noqa: E402
 
-ROOT = Path(__file__).resolve().parent.parent
-RUN_CONFIG = ROOT / "config" / "pilot1" / "run.yaml"
-PHOTOS = ROOT / "data" / "photos"
-RUNS = ROOT / "runs"
+from study import ROOT, Study, add_study_arg  # noqa: E402
+
+STUDY = None  # set in main()
 BASE_URL = "https://openrouter.ai/api/v1"
 
-N_PLACES = 4
 MAX_PHOTO_SIDE = 1024
 MAX_TOKENS = 600            # per answer; JSON + 2-4 sentences is ~300. Credit is reserved per in-flight request.
 EST_OUTPUT_TOKENS = 350     # for the dry-run estimate
@@ -58,7 +57,15 @@ CHARS_PER_TOKEN = 3.5       # rough, errs on the high side for English
 PROVIDER = {"zdr": True, "data_collection": "deny"}  # zero data retention, no training
 RATE_LIMIT_WAITS = (15, 30, 60, 60, 120)  # seconds to wait after each 429 before trying again
 
-TASK_KEYS = {"B4": "B4_senses", "B5": "B5_elements_bother", "B6": "B6_elements_feel_good", "B7": "B7_changes"}
+
+
+def task_keys(codebook):
+    """{question: JSON key} of the multi-select Part B questions, from the codebook."""
+    return {bid: codebook["part_b"][bid]["json_key"] for bid in bp.TASK_QUESTIONS}
+
+
+def n_places(codebook):
+    return codebook["places"]
 
 
 class OutOfCredits(Exception):
@@ -66,7 +73,7 @@ class OutOfCredits(Exception):
 
 
 def load_run_config():
-    with open(RUN_CONFIG, encoding="utf-8") as f:
+    with open(STUDY.run_config, encoding="utf-8") as f:
         return yaml.safe_load(f)
 
 
@@ -112,11 +119,12 @@ def answer_schema(codebook, strict=False):
             "additionalProperties": False,
         },
     }
-    for bid, key in TASK_KEYS.items():
-        codes = [o["code"] for o in codebook["part_b"][bid]["options"]]
-        lst = {"type": "array", "items": {"type": "string", "enum": codes}, "minItems": 1}
+    for bid, key in task_keys(codebook).items():
+        q = codebook["part_b"][bid]
+        codes = [o["code"] for o in q["options"]]
+        lst = {"type": "array", "items": {"type": "string", "enum": codes}, "minItems": q.get("min", 1)}
         if not strict:
-            lst.update({"maxItems": codebook["part_b"][bid].get("max", 3), "uniqueItems": True})
+            lst.update({"maxItems": q.get("max", 3), "uniqueItems": True})
         props[key] = lst
     props["reasoning"] = {"type": "string"}
     return {
@@ -133,7 +141,7 @@ def validate(answer, codebook, schema):
               for e in jsonschema.Draft202012Validator(schema).iter_errors(answer)]
     if errors:
         return errors
-    for bid, key in TASK_KEYS.items():
+    for bid, key in task_keys(codebook).items():
         exclusive = {o["code"] for o in codebook["part_b"][bid]["options"] if o.get("exclusive")}
         chosen = answer[key]
         if len(chosen) > 1 and exclusive & set(chosen):
@@ -145,7 +153,7 @@ def validate(answer, codebook, schema):
 
 def photo_data_url(place):
     """Photo as a JPEG data URL, resized to at most MAX_PHOTO_SIDE on the long side."""
-    path = PHOTOS / f"place{place}.jpg"
+    path = STUDY.photo(place)
     im = Image.open(path).convert("RGB")
     if max(im.size) > MAX_PHOTO_SIDE:
         im.thumbnail((MAX_PHOTO_SIDE, MAX_PHOTO_SIDE), Image.LANCZOS)
@@ -161,19 +169,19 @@ def call_seed(run_id, pid, version, place, run):
 
 def plan_calls(run_id, personas, codebook, config, versions):
     """Every call of the run, in execution order, with its prompt parts."""
-    system = bp.read_prompt("system.txt")
+    system = bp.read_prompt(STUDY, "system.txt")
     calls = []
     for run in range(1, config["runs_per_condition"] + 1):
         for pid in sorted(personas):
             for version in versions:
-                for place in range(1, N_PLACES + 1):
+                for place in range(1, n_places(codebook) + 1):
                     seed = call_seed(run_id, pid, version, place, run)
                     order = bp.option_order(codebook, random.Random(seed))
                     calls.append({
                         "participant": pid, "version": version, "place": f"P{place}", "run": run,
                         "seed": seed, "option_order": order,
                         "system": system,
-                        "user_text": personas[pid][version] + "\n\n" + bp.render_task(codebook, order),
+                        "user_text": personas[pid][version] + "\n\n" + bp.render_task(codebook, order, version, STUDY),
                         "photo": place,
                     })
     return calls
@@ -207,8 +215,9 @@ def image_tokens(size):
 
 # --- dry run -----------------------------------------------------------------
 
-def dry_run(run_id, calls, config, schema_strict, out_dir, versions):
-    photo_sizes = {p: photo_data_url(p)[1] for p in range(1, N_PLACES + 1)}
+def dry_run(run_id, calls, config, schema_strict, out_dir, versions, codebook):
+    places = n_places(codebook)
+    photo_sizes = {p: photo_data_url(p)[1] for p in range(1, places + 1)}
     in_tokens = [
         int((len(c["system"]) + len(c["user_text"]) + len(json.dumps(schema_strict))) / CHARS_PER_TOKEN)
         + image_tokens(photo_sizes[c["photo"]])
@@ -233,7 +242,7 @@ def dry_run(run_id, calls, config, schema_strict, out_dir, versions):
     print(f"Dry run {run_id} - no API call made")
     print(f"  model: {config['model']} | temperature {config['temperature']} | provider {PROVIDER}")
     print(f"  calls: {n} (participants x versions x places x runs = "
-          f"{len({c['participant'] for c in calls})} x {len(versions)} x {N_PLACES} x {config['runs_per_condition']})"
+          f"{len({c['participant'] for c in calls})} x {len(versions)} x {places} x {config['runs_per_condition']})"
           f" | caps: {config['max_calls']} calls, ${config['max_cost_usd']:.2f}")
     print(f"  photos: {', '.join(f'place{p} {s[0]}x{s[1]}' for p, s in photo_sizes.items())}")
     print(f"  input tokens per call: ~{min(in_tokens)}-{max(in_tokens)} (text estimated at "
@@ -292,7 +301,8 @@ def real_run(run_id, calls, config, codebook, schema, schema_strict, out_dir, ve
     (out_dir / "pilot").write_text("pilot: true\n", encoding="utf-8")
     run_yaml = out_dir / "run.yaml"
     meta = yaml.safe_load(run_yaml.read_text(encoding="utf-8")) if run_yaml.exists() else {
-        **config, "run_id": run_id, "provider": PROVIDER, "codebook_version": codebook.get("version"), "sessions": []}
+        **config, "run_id": run_id, "study": STUDY.name, "provider": PROVIDER,
+        "codebook": str(STUDY.codebook_path.relative_to(ROOT)), "codebook_version": codebook.get("version"), "sessions": []}
     meta.setdefault("sessions", []).append({"started": datetime.now(timezone.utc).isoformat(),
                                             "versions": versions, "max_tokens": MAX_TOKENS})
     run_yaml.write_text(yaml.safe_dump(meta, sort_keys=False), encoding="utf-8")
@@ -310,7 +320,7 @@ def real_run(run_id, calls, config, codebook, schema, schema_strict, out_dir, ve
     print(f"Run {run_id}: {len(calls)} calls planned for {versions}, {len(calls) - len(todo)} already answered, "
           f"{len(todo)} to do | so far {api_calls} API calls, ${total_cost:.4f}")
 
-    photos = {p: photo_data_url(p)[0] for p in range(1, N_PLACES + 1)}
+    photos = {p: photo_data_url(p)[0] for p in range(1, n_places(codebook) + 1)}
     response_format = {"type": "json_schema",
                        "json_schema": {"name": "part_b_answer", "strict": True, "schema": schema_strict}}
 
@@ -401,7 +411,9 @@ def real_run(run_id, calls, config, codebook, schema, schema_strict, out_dir, ve
 
 
 def main():
+    global STUDY
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    add_study_arg(ap)
     ap.add_argument("--dry-run", action="store_true", help="build prompts and estimate cost, no API call")
     ap.add_argument("--resume", type=Path, metavar="RUN_DIR", help="continue this run (same run id and seeds)")
     ap.add_argument("--versions", nargs="+", choices=bp.VERSIONS, default=list(bp.VERSIONS),
@@ -409,11 +421,12 @@ def main():
     args = ap.parse_args()
     sys.stdout.reconfigure(encoding="utf-8")
 
+    STUDY = Study(args.study)
     config = load_run_config()
-    codebook = bp.load_codebook()
-    if not bp.OUT_JSON.exists():
-        sys.exit("Not found: data/clean/personas.json. Run src/build_personas.py first.")
-    with open(bp.OUT_JSON, encoding="utf-8") as f:
+    codebook = STUDY.codebook()
+    if not STUDY.personas.exists():
+        sys.exit(f"Not found: {STUDY.personas.relative_to(ROOT)}. Run src/build_personas.py first.")
+    with open(STUDY.personas, encoding="utf-8") as f:
         personas = json.load(f)
     missing = [v for v in args.versions if any(v not in p for p in personas.values())]
     if missing:
@@ -423,19 +436,23 @@ def main():
         out_dir = args.resume if args.resume.is_absolute() else ROOT / args.resume
         meta = yaml.safe_load((out_dir / "run.yaml").read_text(encoding="utf-8"))
         run_id = meta["run_id"]
+        if meta.get("study", STUDY.name) != STUDY.name:
+            sys.exit(f"Run {run_id} belongs to study {meta['study']!r}, not {STUDY.name!r}: use --study {meta['study']}.")
         if meta["model"] != config["model"] or meta["temperature"] != config["temperature"]:
-            sys.exit(f"config/run.yaml (model {config['model']}, temperature {config['temperature']}) differs "
-                     f"from run {run_id} ({meta['model']}, {meta['temperature']}): not resuming.")
+            sys.exit(f"{STUDY.run_config.relative_to(ROOT)} (model {config['model']}, temperature "
+                     f"{config['temperature']}) differs from run {run_id} ({meta['model']}, {meta['temperature']}): "
+                     "not resuming.")
     else:
         model_short = config["model"].split("/")[-1]
-        run_id = datetime.now().strftime("%Y%m%d-%H%M%S") + f"_{model_short}" + ("_dry" if args.dry_run else "")
-        out_dir = RUNS / run_id
+        run_id = (datetime.now().strftime("%Y%m%d-%H%M%S") + f"_{model_short}_{STUDY.name}"
+                  + ("_dry" if args.dry_run else ""))
+        out_dir = STUDY.runs / run_id
     schema = answer_schema(codebook)
     schema_strict = answer_schema(codebook, strict=True)
     calls = plan_calls(run_id, personas, codebook, config, args.versions)
 
     if args.dry_run:
-        dry_run(run_id, calls, config, schema_strict, out_dir, args.versions)
+        dry_run(run_id, calls, config, schema_strict, out_dir, args.versions, codebook)
     else:
         real_run(run_id, calls, config, codebook, schema, schema_strict, out_dir, args.versions)
 

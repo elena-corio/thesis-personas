@@ -1,119 +1,190 @@
-"""Step 4a: score persona answers against their own participant.
+"""Step 4a: score persona answers against their own participant (survey v2).
 
     python src/score.py runs/<run_id> [runs/<run_id2> ...]
 
-Several run folders can be combined (e.g. a later run with an extra version); the
-scores are written to the first folder as scores.json. Every persona answer is
-compared only with its own participant:
+The study comes from the run's run.yaml. Several run folders of the same study can be
+combined; scores.json goes to the first folder. Every persona answer is compared only
+with its own participant. Outcomes, fixed before the data:
 
-    B2      absolute error; per participant x version, Spearman correlation of the
-            4 places' B2 (does the persona get the order of places right)
-    B3      mean absolute error over the 4 situations
-    B4-B7   Jaccard overlap between the persona's and the person's selections
+    primary     B3: mean absolute error over the 4 situations (also per factor / row)
+    secondary   B2: absolute error; Spearman correlation of the places within each person
+    B4-B6       Jaccard, precision (share of the persona's picks the person also made) and
+                recall (share of the person's picks the persona found); per sense / factor
+    bias        signed error, persona - person (B2 negative = less comfortable than the
+                person; B3 positive = sees more problems than the person)
+    copy check  distance of the persona's B3 to the person's own Q14 (near 0 = copies the profile)
 
-Per participant x version x place, the scores are averaged over runs, and the
-run-to-run spread is kept (standard deviation over runs; for B2/B3 also the range).
-
-Also computed:
-    bias        signed error, persona - person (B2: negative = less comfortable than the
-                person; B3: positive = sees more problems than the person)
-    B3_vs_Q15   how close the persona's B3 is to the person's general Q15 ratings
-                (same 4 situations): near 0 = the persona copies the profile
-    baselines   scores of answering from the profile alone, with no model and no photo:
-                B3 = own Q15, B4 = top-rated senses in Q16, B2 = always 3
-    diversity   how much answers differ between participants, personas vs humans
+Baselines, scored exactly like a persona:
+    average human  leave-one-out: the mean (B2, B3) or majority picks (B4-B6) of the
+                   *other* participants for the same place (needs >= 2 participants)
+    chance         random valid answers (expected value, simulated with a fixed seed)
+    always 3       B2 = 3
+    copy Part A    B3 = Q14 rows, B4 = Q15 codes, B5 = Q16 codes (same sense codes)
 """
 
 import json
+import random
 import statistics
 import sys
-from collections import defaultdict
+from collections import Counter, defaultdict
 from pathlib import Path
 
+import yaml
 from scipy.stats import spearmanr
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from run_personas import latest_records  # noqa: E402
+from study import Study  # noqa: E402
 
-ROOT = Path(__file__).resolve().parent.parent
-PARTICIPANTS = ROOT / "data" / "clean" / "participants.json"
-
-LISTS = {"B4": "B4_senses", "B5": "B5_elements_bother", "B6": "B6_elements_feel_good", "B7": "B7_changes"}
+LISTS = ("B4", "B5", "B6")
+CHANCE_DRAWS = 2000
 
 
 def load_calls(run_dirs):
     """The latest record of every call that got an answer (API errors are not answers)."""
-    from run_personas import latest_records
     calls = []
     for d in run_dirs:
         calls += [r for r in latest_records(d / "calls.jsonl").values() if r["status"] != "api_error"]
     return calls
 
 
-def jaccard(a, b):
-    a, b = set(a), set(b)
-    return 1.0 if not a and not b else len(a & b) / len(a | b)
+def study_of(run_dirs):
+    names = {yaml.safe_load((d / "run.yaml").read_text(encoding="utf-8")).get("study") for d in run_dirs}
+    if len(names) != 1 or None in names:
+        sys.exit(f"Run folders must belong to one study, found {names}")
+    return Study(names.pop())
 
 
-def human_answer(part_b_place):
-    """The participant's own Part B answer for one place, in the persona's answer shape."""
-    return {
-        "B2_comfort": part_b_place["B2"],
-        "B3_situations": part_b_place["B3"],
-        **{key: part_b_place[bid] for bid, key in LISTS.items()},
-    }
-
-
-def score_answer(persona, human, q15):
-    """Accuracy (abs. error, Jaccard), bias (signed error: persona - person; negative = persona
-    rates the place worse / less comfortable) and how closely B3 echoes the profile's Q15."""
-    s = {"B2_abs_error": abs(persona["B2_comfort"] - human["B2_comfort"]),
-         "B2_signed": persona["B2_comfort"] - human["B2_comfort"]}
-    rows = [r for r, v in human["B3_situations"].items() if v is not None]
-    s["B3_mae"] = statistics.mean(abs(persona["B3_situations"][r] - human["B3_situations"][r]) for r in rows)
-    # B3 is "how much a problem": positive = persona sees more problems than the person
-    s["B3_signed"] = statistics.mean(persona["B3_situations"][r] - human["B3_situations"][r] for r in rows)
-    q15_rows = [r for r in rows if q15.get(r) is not None]
-    s["B3_vs_Q15"] = (statistics.mean(abs(persona["B3_situations"][r] - q15[r]) for r in q15_rows)
-                      if q15_rows else None)
-    for bid, key in LISTS.items():
-        s[f"{bid}_jaccard"] = jaccard(persona[key], human[key])
-    return s
-
-
-METRICS = ["B2_abs_error", "B2_signed", "B3_mae", "B3_signed", "B3_vs_Q15"] + [f"{b}_jaccard" for b in LISTS]
+def mean(values):
+    values = [v for v in values if v is not None]
+    return statistics.mean(values) if values else None
 
 
 def spread(values):
     return statistics.pstdev(values) if len(values) > 1 else 0.0
 
 
-# --- baselines without any model -----------------------------------------------
+# --- comparing one answer with one person ------------------------------------------
 
-def top_senses(q16, k=3):
-    """The senses the person rated highest in Q16 (up to k, ties in codebook order)."""
-    rated = [(code, v) for code, v in q16.items() if v is not None]
-    if not rated:
-        return []
-    rated.sort(key=lambda cv: -cv[1])  # stable: keeps codebook order within ties
-    return [code for code, _ in rated[:k]]
+def jaccard(a, b):
+    a, b = set(a), set(b)
+    return 1.0 if not a and not b else len(a & b) / len(a | b)
 
 
-def copy_baselines(humans):
-    """Per participant x place: the score of answering from the profile alone, without looking
-    at any place. B3 = the person's own Q15 (same 4 situations, asked in general); B4 = the
-    senses they rated highest in Q16; B2 = always 3 (the middle of the scale)."""
+def precision(pred, true):
+    return len(set(pred) & set(true)) / len(set(pred)) if pred else None
+
+
+def recall(pred, true):
+    return len(set(pred) & set(true)) / len(set(true)) if true else None
+
+
+def compare(answer, human, keys, q14=None):
+    """answer/human: {"B2": int, "B3": {row: int}, "B4": [codes], ...} -> metrics."""
+    s = {}
+    if answer.get("B2") is not None and human["B2"] is not None:
+        s["B2_abs_error"] = abs(answer["B2"] - human["B2"])
+        s["B2_signed"] = answer["B2"] - human["B2"]
+    rows = [r for r, v in human["B3"].items() if v is not None and answer["B3"].get(r) is not None]
+    if rows:
+        s["B3_mae"] = statistics.mean(abs(answer["B3"][r] - human["B3"][r]) for r in rows)
+        s["B3_signed"] = statistics.mean(answer["B3"][r] - human["B3"][r] for r in rows)
+        for r in rows:
+            s[f"B3_err_{r}"] = abs(answer["B3"][r] - human["B3"][r])
+    if q14 is not None:
+        q_rows = [r for r in answer["B3"] if q14.get(r) is not None]
+        s["B3_vs_Q14"] = statistics.mean(abs(answer["B3"][r] - q14[r]) for r in q_rows) if q_rows else None
+    for bid in keys:
+        if answer.get(bid) is None:
+            continue
+        s[f"{bid}_jaccard"] = jaccard(answer[bid], human[bid])
+        s[f"{bid}_precision"] = precision(answer[bid], human[bid])
+        s[f"{bid}_recall"] = recall(answer[bid], human[bid])
+    return s
+
+
+def human_answer(part_b_place):
+    return {"B2": part_b_place["B2"], "B3": part_b_place["B3"], **{b: part_b_place[b] for b in LISTS}}
+
+
+def persona_answer(parsed, codebook):
+    keys = {b: codebook["part_b"][b]["json_key"] for b in LISTS}
+    return {"B2": parsed["B2_comfort"], "B3": parsed["B3_situations"], **{b: parsed[k] for b, k in keys.items()}}
+
+
+# --- baselines --------------------------------------------------------------------
+
+def random_answer(codebook, rng):
+    b3_rows = [r["code"] for r in codebook["part_b"]["B3"]["rows"]]
+    ans = {"B2": rng.randint(1, 5), "B3": {r: rng.randint(1, 5) for r in b3_rows}}
+    for bid in LISTS:
+        opts = [o for o in codebook["part_b"][bid]["options"] if o["code"] != "other"]
+        exclusive = [o["code"] for o in opts if o.get("exclusive")]
+        regular = [o["code"] for o in opts if not o.get("exclusive")]
+        # a valid answer: one exclusive code alone, or 1-3 regular codes, each shape equally likely
+        n_shapes = len(exclusive) + 3
+        shape = rng.randrange(n_shapes)
+        ans[bid] = [exclusive[shape]] if shape < len(exclusive) else rng.sample(regular, shape - len(exclusive) + 1)
+    return ans
+
+
+def baselines(humans, codebook, places):
+    """Per participant x place, the metrics of each baseline."""
+    pids = sorted(humans)
+    rng = random.Random(0)
     out = []
-    for pid, p in humans.items():
-        q15, q16 = p["part_a"]["Q15"], p["part_a"]["Q16"]
-        for i in range(1, 5):
-            h = human_answer(p["part_b"][f"P{i}"])
-            rows = [r for r, v in h["B3_situations"].items() if v is not None and q15.get(r) is not None]
-            out.append({
-                "participant": pid, "place": f"P{i}",
-                "B2_const3_abs_error": abs(3 - h["B2_comfort"]),
-                "B3_copy_Q15_mae": statistics.mean(abs(q15[r] - h["B3_situations"][r]) for r in rows) if rows else None,
-                "B4_copy_Q16_jaccard": jaccard(top_senses(q16), h["B4_senses"]),
-            })
+    for pid in pids:
+        p = humans[pid]
+        q14 = p["part_a"]["Q14"]
+        for pl in places:
+            h = human_answer(p["part_b"][pl])
+            row = {"participant": pid, "place": pl}
+            # always 3
+            row["const3"] = {"B2_abs_error": abs(3 - h["B2"]), "B2_signed": 3 - h["B2"]}
+            # copy Part A
+            copy = {"B2": None, "B3": dict(q14), "B4": p["part_a"]["Q15"], "B5": p["part_a"]["Q16"]}
+            copy["B4"] = [c for c in copy["B4"] if c != "other"]
+            copy["B5"] = [c for c in copy["B5"] if c != "other"]
+            row["copy"] = compare(copy, h, ("B4", "B5"))
+            # average human, leave-one-out
+            others = [humans[o]["part_b"][pl] for o in pids if o != pid]
+            if others:
+                avg = {"B2": statistics.mean(o["B2"] for o in others),
+                       "B3": {r: mean([o["B3"].get(r) for o in others]) for r in h["B3"]}}
+                for bid in LISTS:
+                    counts = Counter(c for o in others for c in o[bid])
+                    majority = [c for c, n in counts.items() if n >= len(others) / 2]
+                    avg[bid] = majority or [c for c, _ in counts.most_common(1)]
+                row["avg_human"] = compare(avg, h, LISTS)
+            # chance: expected value over random valid answers
+            draws = [compare(random_answer(codebook, rng), h, LISTS) for _ in range(CHANCE_DRAWS)]
+            row["chance"] = {k: mean([d.get(k) for d in draws]) for k in draws[0]}
+            out.append(row)
+    return out
+
+
+# --- per sense / per code ----------------------------------------------------------
+
+def per_code(valid, humans, codebook):
+    """Per version x question x code: how often the persona and the person picked it."""
+    tally = defaultdict(lambda: Counter())
+    for c in valid:
+        ans = persona_answer(c["parsed"], codebook)
+        h = humans[c["participant"]]["part_b"][c["place"]]
+        for bid in LISTS:
+            pred, true = set(ans[bid]), set(h[bid])
+            for code in pred | true:
+                key = (c["version"], bid, code)
+                tally[key]["tp"] += code in pred and code in true
+                tally[key]["fp"] += code in pred and code not in true
+                tally[key]["fn"] += code in true and code not in pred
+    out = []
+    for (version, bid, code), t in sorted(tally.items()):
+        opt = next((o for o in codebook["part_b"][bid]["options"] if o["code"] == code), {})
+        out.append({"version": version, "question": bid, "code": code,
+                    "sense": opt.get("sense"), "factor": opt.get("factor"), **t,
+                    "precision": t["tp"] / (t["tp"] + t["fp"]) if t["tp"] + t["fp"] else None,
+                    "recall": t["tp"] / (t["tp"] + t["fn"]) if t["tp"] + t["fn"] else None})
     return out
 
 
@@ -125,121 +196,115 @@ def mean_pairwise_jaccard(selections):
     return statistics.mean(pairs) if pairs else None
 
 
-def diversity(humans, valid):
-    """How much answers differ between participants, per place, averaged over places.
-    B2/B3: SD across participants (personas: of each participant's mean over runs).
-    B4-B7: mean Jaccard between participants (lower = more different); personas compared run by run.
-    Humans are the reference: a version close to the humans' values differentiates people as
-    much as they really differ; near 0 SD / near 1 Jaccard = everyone gets the same answer."""
+def diversity(humans, valid, codebook, places):
+    """Spread between participants per place, averaged: SD for B2/B3, Jaccard for B4-B6 (lower = more
+    different). Needs >= 2 participants."""
     pids = sorted(humans)
-    out = {}
+    if len(pids) < 2:
+        return {}
 
-    def summarise(b2_by_place, b3_by_place, lists_by_place):
-        res = {"B2_sd_between": statistics.mean(spread(v) for v in b2_by_place.values()),
-               "B3_sd_between": statistics.mean(spread(v) for v in b3_by_place.values())}
+    def summarise(b2, b3, lists):
+        res = {"B2_sd_between": mean([spread(v) for v in b2.values()]),
+               "B3_sd_between": mean([spread(v) for v in b3.values()])}
         for bid in LISTS:
-            vals = [mean_pairwise_jaccard(sel) for sel in lists_by_place[bid]]
-            vals = [v for v in vals if v is not None]
-            res[f"{bid}_jaccard_between"] = statistics.mean(vals) if vals else None
+            res[f"{bid}_jaccard_between"] = mean([mean_pairwise_jaccard(sel) for sel in lists[bid]])
         return res
 
-    places = [f"P{i}" for i in range(1, 5)]
-    # humans
-    b2 = {pl: [humans[p]["part_b"][pl]["B2"] for p in pids] for pl in places}
-    b3 = {(pl, r): [humans[p]["part_b"][pl]["B3"][r] for p in pids if humans[p]["part_b"][pl]["B3"].get(r) is not None]
-          for pl in places for r in humans[pids[0]]["part_b"][pl]["B3"]}
-    lists = {bid: [[humans[p]["part_b"][pl][bid] for p in pids] for pl in places] for bid in LISTS}
-    out["Humans"] = summarise(b2, b3, lists)
-
-    # personas, per version
+    rows = [r["code"] for r in codebook["part_b"]["B3"]["rows"]]
+    out = {"Humans": summarise(
+        {pl: [humans[p]["part_b"][pl]["B2"] for p in pids] for pl in places},
+        {(pl, r): [v for p in pids if (v := humans[p]["part_b"][pl]["B3"].get(r)) is not None]
+         for pl in places for r in rows},
+        {bid: [[humans[p]["part_b"][pl][bid] for p in pids] for pl in places] for bid in LISTS})}
     for version in sorted({c["version"] for c in valid}):
-        vc = [c for c in valid if c["version"] == version]
         by = defaultdict(list)
-        for c in vc:
-            by[(c["participant"], c["place"])].append(c["parsed"])
-        if any((p, pl) not in by for p in pids for pl in places):
-            continue  # a participant without answers for this version: diversity not comparable
-        b2 = {pl: [statistics.mean(a["B2_comfort"] for a in by[(p, pl)]) for p in pids] for pl in places}
-        rows = list(vc[0]["parsed"]["B3_situations"])
-        b3 = {(pl, r): [statistics.mean(a["B3_situations"][r] for a in by[(p, pl)]) for p in pids]
-              for pl in places for r in rows}
-        runs = sorted({c["run"] for c in vc})
-        run_of = {(c["participant"], c["place"], c["run"]): c["parsed"] for c in vc}
-        lists = {bid: [[run_of[(p, pl, rn)][key] for p in pids]
-                       for pl in places for rn in runs if all((p, pl, rn) in run_of for p in pids)]
-                 for bid, key in LISTS.items()}
-        out[version] = summarise(b2, b3, lists)
+        for c in valid:
+            if c["version"] == version:
+                by[(c["participant"], c["place"], c["run"])] = persona_answer(c["parsed"], codebook)
+        runs = sorted({k[2] for k in by})
+        if any(not any((p, pl, rn) in by for rn in runs) for p in pids for pl in places):
+            continue
+
+        def runs_of(p, pl):
+            return [by[(p, pl, rn)] for rn in runs if (p, pl, rn) in by]
+        out[version] = summarise(
+            {pl: [statistics.mean(a["B2"] for a in runs_of(p, pl)) for p in pids] for pl in places},
+            {(pl, r): [statistics.mean(a["B3"][r] for a in runs_of(p, pl)) for p in pids]
+             for pl in places for r in rows},
+            {bid: [[by[(p, pl, rn)][bid] for p in pids] for pl in places for rn in runs
+                   if all((p, pl, rn) in by for p in pids)] for bid in LISTS})
     return out
 
+
+# --- main ----------------------------------------------------------------------
 
 def main():
     run_dirs = [Path(a) for a in sys.argv[1:]]
     if not run_dirs:
         sys.exit(__doc__)
     sys.stdout.reconfigure(encoding="utf-8")
-    with open(PARTICIPANTS, encoding="utf-8") as f:
+    study = study_of(run_dirs)
+    codebook = study.codebook()
+    places = [f"P{i}" for i in range(1, codebook["places"] + 1)]
+    with open(study.participants, encoding="utf-8") as f:
         humans = {p["id"]: p for p in json.load(f)}
 
     calls = load_calls(run_dirs)
     valid = [c for c in calls if c["valid"]]
 
-    # per call
     per_call = []
     for c in valid:
-        human = human_answer(humans[c["participant"]]["part_b"][c["place"]])
-        q15 = humans[c["participant"]]["part_a"]["Q15"]
+        h = human_answer(humans[c["participant"]]["part_b"][c["place"]])
+        q14 = humans[c["participant"]]["part_a"]["Q14"]
         per_call.append({k: c[k] for k in ("run_id", "participant", "version", "place", "run")}
-                        | score_answer(c["parsed"], human, q15))
+                        | compare(persona_answer(c["parsed"], codebook), h, LISTS, q14))
 
-    # per participant x version x place: mean over runs and run-to-run spread
+    # per participant x version x place: mean over runs, and how much the runs differ
     groups = defaultdict(list)
-    for s in per_call:
-        groups[(s["participant"], s["version"], s["place"])].append(s)
-    metrics = METRICS
+    for s, c in zip(per_call, valid):
+        groups[(s["participant"], s["version"], s["place"])].append((s, persona_answer(c["parsed"], codebook)))
     cells = []
     for (pid, version, place), items in sorted(groups.items()):
-        call_of = {(c["participant"], c["version"], c["place"], c["run"], c["run_id"]): c for c in valid}
-        answers = [call_of[(pid, version, place, s["run"], s["run_id"])]["parsed"] for s in items]
-        b2 = [a["B2_comfort"] for a in answers]
+        scores = [s for s, _ in items]
+        answers = [a for _, a in items]
+        b2 = [a["B2"] for a in answers]
+        b3_means = [statistics.mean(a["B3"].values()) for a in answers]
         cell = {"participant": pid, "version": version, "place": place, "n_runs": len(items),
-                "B2_values": b2, "B2_mean": statistics.mean(b2), "B2_sd": spread(b2),
-                "B2_range": max(b2) - min(b2)}
-        b3_means = [statistics.mean(a["B3_situations"].values()) for a in answers]
-        cell.update({"B3_mean": statistics.mean(b3_means), "B3_sd": spread(b3_means)})
-        for m in metrics:
-            vals = [s[m] for s in items if s[m] is not None]
-            cell[m] = statistics.mean(vals) if vals else None
-            cell[f"{m}_sd"] = spread(vals)
-        # how much the runs agree on the list choices: mean pairwise Jaccard between runs
-        for bid, key in LISTS.items():
-            pairs = [jaccard(answers[i][key], answers[j][key])
+                "B2_values": b2, "B2_mean": statistics.mean(b2), "B2_range": max(b2) - min(b2),
+                "B3_mean": statistics.mean(b3_means), "B3_range": max(b3_means) - min(b3_means)}
+        for m in {k for s in scores for k in s if k not in ("run_id", "participant", "version", "place", "run")}:
+            vals = [s.get(m) for s in scores]
+            cell[m] = mean(vals)
+        for bid in LISTS:
+            pairs = [jaccard(answers[i][bid], answers[j][bid])
                      for i in range(len(answers)) for j in range(i + 1, len(answers))]
-            cell[f"{bid}_run_agreement"] = statistics.mean(pairs) if pairs else None
+            cell[f"{bid}_run_agreement"] = mean(pairs)
         cells.append(cell)
 
-    # Spearman of the 4 places' B2, per participant x version (mean persona B2 over runs)
+    # Spearman of the places' B2 within each person (persona: mean over runs)
     spearman = []
-    for pid in sorted({c["participant"] for c in cells}):
-        human_b2 = [humans[pid]["part_b"][f"P{i}"]["B2"] for i in range(1, 5)]
+    for pid in sorted(humans):
+        human_b2 = [humans[pid]["part_b"][pl]["B2"] for pl in places]
         for version in sorted({c["version"] for c in cells}):
             by_place = {c["place"]: c["B2_mean"] for c in cells if c["participant"] == pid and c["version"] == version}
-            if len(by_place) < 4:
-                spearman.append({"participant": pid, "version": version, "rho": None, "note": "fewer than 4 places"})
-                continue
-            persona_b2 = [by_place[f"P{i}"] for i in range(1, 5)]
-            if len(set(human_b2)) == 1 or len(set(persona_b2)) == 1:
-                rho, note = None, "constant B2 (no order to compare)"
+            entry = {"participant": pid, "version": version, "human_B2": human_b2,
+                     "persona_B2_mean": [by_place.get(pl) for pl in places], "rho": None, "note": ""}
+            if len(by_place) < len(places):
+                entry["note"] = "missing places"
+            elif len(set(human_b2)) == 1 or len(set(by_place.values())) == 1:
+                entry["note"] = "constant B2 (no order to compare)"
             else:
-                rho, note = float(spearmanr(human_b2, persona_b2).statistic), ""
-            spearman.append({"participant": pid, "version": version, "rho": rho, "note": note,
-                             "human_B2": human_b2, "persona_B2_mean": persona_b2})
+                entry["rho"] = float(spearmanr(human_b2, [by_place[pl] for pl in places]).statistic)
+            spearman.append(entry)
 
-    out = {"run_dirs": [str(d) for d in run_dirs], "n_calls": len(calls), "n_valid": len(valid),
-           "per_call": per_call, "cells": cells, "spearman_B2": spearman,
-           "baselines": copy_baselines(humans), "diversity": diversity(humans, valid)}
+    out = {"study": study.name, "run_dirs": [str(d) for d in run_dirs], "n_calls": len(calls),
+           "n_valid": len(valid), "places": places, "per_call": per_call, "cells": cells,
+           "spearman_B2": spearman, "baselines": baselines(humans, codebook, places),
+           "per_code": per_code(valid, humans, codebook),
+           "diversity": diversity(humans, valid, codebook, places)}
     with open(run_dirs[0] / "scores.json", "w", encoding="utf-8") as f:
         json.dump(out, f, ensure_ascii=False, indent=2)
-    print(f"Scored {len(valid)} valid of {len(calls)} calls -> {run_dirs[0] / 'scores.json'}")
+    print(f"Scored {len(valid)} valid of {len(calls)} answered calls ({study.name}) -> {run_dirs[0] / 'scores.json'}")
 
 
 if __name__ == "__main__":

@@ -1,10 +1,10 @@
-"""Step 4b: write runs/<run_id>/report.md and charts from calls.jsonl and scores.json.
+"""Step 4b: write runs/<run_id>/report.md and charts from calls.jsonl and scores.json (survey v2).
 
     python src/report.py runs/<run_id> [runs/<run_id2> ...]
 
 Run src/score.py with the same folders first. The report and charts go to the first
-folder. Reasoning samples are written to a separate file, reasoning_samples.md, which
-stays out of git: persona reasoning can repeat a participant's health information.
+folder. Reasoning samples go to reasoning_samples.md, which stays out of git: persona
+reasoning can repeat a participant's health information.
 """
 
 import json
@@ -21,35 +21,22 @@ import yaml  # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from run_personas import latest_records  # noqa: E402
+from score import LISTS, mean, study_of  # noqa: E402
 
-ROOT = Path(__file__).resolve().parent.parent
-PARTICIPANTS = ROOT / "data" / "clean" / "participants.json"
-
-N_PARTICIPANTS_FULL, N_PLACES, N_RUNS = 40, 4, 3
-LISTS = {"B4": "B4_senses", "B5": "B5_elements_bother", "B6": "B6_elements_feel_good", "B7": "B7_changes"}
+N_PARTICIPANTS_FULL, N_RUNS_FULL = 40, 2
+FIXED_LAST = {"none", "no_change_needed", "other"}  # never shuffled
+VERSIONS_ALL = ("V0", "V1", "V2", "V3")
 
 # chart colours: humans neutral, versions in fixed categorical order (validated palette, light mode)
 SURFACE, INK, INK_2, GRID = "#fcfcfb", "#0b0b0b", "#52514e", "#e4e3df"
 HUMAN = "#8a8984"
 VERSION_COLOURS = {"V0": "#2a78d6", "V1": "#eb6834", "V2": "#1baf7a", "V3": "#eda100"}
 
-
-def load(run_dirs):
-    """Latest record of every call that got an answer; API errors are counted separately."""
-    calls, api_errors = [], 0
-    for d in run_dirs:
-        latest = latest_records(d / "calls.jsonl").values()
-        calls += [r for r in latest if r["status"] != "api_error"]
-        api_errors += sum(r["status"] == "api_error" for r in latest)
-    with open(run_dirs[0] / "scores.json", encoding="utf-8") as f:
-        scores = json.load(f)
-    configs = []
-    for d in run_dirs:
-        with open(d / "run.yaml", encoding="utf-8") as f:
-            configs.append(yaml.safe_load(f))
-    with open(PARTICIPANTS, encoding="utf-8") as f:
-        humans = {p["id"]: p for p in json.load(f)}
-    return calls, api_errors, scores, configs, humans
+# the 2 x 2 design: (without, with) pairs for each factor
+EFFECTS = {
+    "Lived experience": [("V0", "V3", "without labels"), ("V1", "V2", "with labels")],
+    "Labels": [("V0", "V1", "without lived experience"), ("V3", "V2", "with lived experience")],
+}
 
 
 def fmt(x, nd=2):
@@ -62,55 +49,86 @@ def md_table(header, rows):
     return "\n".join(out)
 
 
-# --- sections ----------------------------------------------------------------
-
 def answered(call):
-    """Attempts that reached the model (API errors and rate limits excluded)."""
     return [a for a in call["attempts"] if "raw_response" in a]
 
 
-def short(error, n=140):
-    return error if len(error) <= n else error[: n - 1] + "…"
+def short(text, n=140):
+    return text if len(text) <= n else text[: n - 1] + "…"
 
 
-def section_format(calls, api_errors):
+def load(run_dirs):
+    calls, api_errors = [], 0
+    for d in run_dirs:
+        latest = latest_records(d / "calls.jsonl").values()
+        calls += [r for r in latest if r["status"] != "api_error"]
+        api_errors += sum(r["status"] == "api_error" for r in latest)
+    with open(run_dirs[0] / "scores.json", encoding="utf-8") as f:
+        scores = json.load(f)
+    configs = [yaml.safe_load((d / "run.yaml").read_text(encoding="utf-8")) for d in run_dirs]
+    study = study_of(run_dirs)
+    with open(study.participants, encoding="utf-8") as f:
+        humans = {p["id"]: p for p in json.load(f)}
+    leaks_path = study.clean / "label_leaks.json"
+    leaks = json.loads(leaks_path.read_text(encoding="utf-8")) if leaks_path.exists() else {}
+    return calls, api_errors, scores, configs, study, humans, leaks
+
+
+def by_version(cells, key, version, pid=None):
+    return mean([c.get(key) for c in cells if c["version"] == version and (pid is None or c["participant"] == pid)])
+
+
+def baseline_mean(scores, name, key):
+    return mean([b.get(name, {}).get(key) for b in scores["baselines"]])
+
+
+# --- sections ----------------------------------------------------------------
+
+def section_format(calls, api_errors, codebook):
     n = len(calls)
     valid = sum(c["valid"] for c in calls)
     retried = [c for c in calls if len(answered(c)) > 1]
-    fixed = sum(c["valid"] for c in retried)
     invalid = [c for c in calls if not c["valid"]]
-    api_attempts = Counter(short(a["error"], 90) for c in calls for a in c["attempts"] if "error" in a)
+    too_long = sum(1 for c in retried for e in answered(c)[0]["errors"] if "too long" in e)
     lines = [f"- Valid answers: **{valid} / {n}** answered calls ({100 * valid / n:.0f}%).",
-             f"- Calls retried once for an invalid answer: {len(retried)} ({fixed} became valid on retry)."]
+             f"- Retried once for an invalid answer: {len(retried)} ({sum(c['valid'] for c in retried)} valid on retry). "
+             f"**More than 3 items** (the smoke test's most common error, before \"Choose 1 to 3\"): {too_long}."]
     if api_errors:
         lines.append(f"- ⚠ Calls still without an answer (API error, not a format problem): {api_errors}.")
+    api_attempts = Counter(short(a["error"], 90) for c in calls for a in c["attempts"] if "error" in a)
     if api_attempts:
-        lines.append("- API errors before an answer came through (not format problems; the call was done again):")
+        lines.append("- API errors before an answer came through (the call was done again):")
         lines += [f"  - {e} ({k}×)" for e, k in api_attempts.most_common()]
     first_errors = Counter(short(e) for c in retried for e in answered(c)[0]["errors"])
     if first_errors:
         lines.append("- First-attempt errors that triggered a retry:")
         lines += [f"  - {e} ({k}×)" for e, k in first_errors.most_common()]
-    if invalid:
-        lines.append(f"- Invalid after retry: {len(invalid)}")
-        lines += [f"  - {c['participant']} {c['version']} {c['place']} run {c['run']}: {'; '.join(c['errors'])}"
-                  for c in invalid]
-    else:
-        lines.append("- Invalid after retry: none.")
+    lines.append(f"- Invalid after retry: {len(invalid)}"
+                 + "".join(f"\n  - {c['participant']} {c['version']} {c['place']} run {c['run']}: "
+                           f"{'; '.join(c['errors'])}" for c in invalid))
     models = Counter(c["model"] for c in calls)
     providers = Counter(a.get("provider") for c in calls for a in answered(c))
-    finish = Counter(a.get("finish_reason") for c in calls for a in answered(c))
-    lines.append(f"- Model ids returned by the API: {dict(models)}; providers: {dict(providers)}; "
-                 f"finish reasons: {dict(finish)}.")
+    lines.append(f"- Model ids returned by the API: {dict(models)}; providers: {dict(providers)}.")
+    # option order
+    keys = {b: codebook["part_b"][b]["json_key"] for b in LISTS}
+    pos = defaultdict(list)
+    for c in calls:
+        if not c["valid"]:
+            continue
+        for bid, key in keys.items():
+            order = [code for code in c["option_order"][bid] if code not in FIXED_LAST]
+            pos[bid] += [order.index(code) / (len(order) - 1) for code in c["parsed"][key] if code in order]
+    lines.append("- Option order (shuffled each call): mean relative position of the chosen options, "
+                 "0.50 = order has no effect, lower = first options favoured: "
+                 + ", ".join(f"{b} {fmt(mean(v))}" for b, v in pos.items()) + ".")
     return "\n".join(lines)
 
 
-def scale_distributions(calls, humans, versions):
+def scale_distributions(calls, humans, versions, places):
     dist = {"B2": {}, "B3": {}}
-    h_b2 = [p["part_b"][f"P{i}"]["B2"] for p in humans.values() for i in range(1, 5)]
-    h_b3 = [v for p in humans.values() for i in range(1, 5) for v in p["part_b"][f"P{i}"]["B3"].values()
-            if v is not None]
-    dist["B2"]["Humans"], dist["B3"]["Humans"] = Counter(h_b2), Counter(h_b3)
+    dist["B2"]["Humans"] = Counter(p["part_b"][pl]["B2"] for p in humans.values() for pl in places)
+    dist["B3"]["Humans"] = Counter(v for p in humans.values() for pl in places
+                                   for v in p["part_b"][pl]["B3"].values() if v is not None)
     for v in versions:
         answers = [c["parsed"] for c in calls if c["valid"] and c["version"] == v]
         dist["B2"][v] = Counter(a["B2_comfort"] for a in answers)
@@ -131,8 +149,7 @@ def chart_scale(dist, versions, path):
             xs = [x + (k - (len(series) - 1) / 2) * width for x in range(1, 6)]
             ax.bar(xs, [counts.get(x, 0) / total for x in range(1, 6)], width=width,
                    color=col, edgecolor=SURFACE, linewidth=1.5, label=name, zorder=2)
-        ax.set_title({"B2": "B2 comfort", "B3": "B3 situations (all 4 rows)"}[q],
-                     loc="left", fontsize=10, color=INK)
+        ax.set_title({"B2": "B2 comfort", "B3": "B3 situations (all 4 rows)"}[q], loc="left", fontsize=10, color=INK)
         ax.set_xticks(range(1, 6))
         ax.tick_params(colors=INK_2, labelsize=9, length=0)
         ax.grid(axis="y", color=GRID, linewidth=0.8, zorder=0)
@@ -147,262 +164,262 @@ def chart_scale(dist, versions, path):
     plt.close(fig)
 
 
-def section_scale(dist, versions, chart_name):
+def section_scale(dist, versions):
     rows = []
     for q in ("B2", "B3"):
         for name in ["Humans"] + versions:
             c = dist[q][name]
             total = sum(c.values())
-            mid = c.get(3, 0) / total if total else 0
-            ext = (c.get(1, 0) + c.get(5, 0)) / total if total else 0
-            rows.append([q, name, total] + [c.get(x, 0) for x in range(1, 6)] + [f"{100 * mid:.0f}%", f"{100 * ext:.0f}%"])
-    table = md_table(["Q", "Who", "n", "1", "2", "3", "4", "5", "share of 3", "share of 1 or 5"], rows)
-    return f"![Distribution of B2 and B3 answers]({chart_name})\n\n{table}"
+            rows.append([q, name, total] + [c.get(x, 0) for x in range(1, 6)]
+                        + [f"{100 * c.get(3, 0) / total:.0f}%" if total else "–",
+                           f"{100 * (c.get(1, 0) + c.get(5, 0)) / total:.0f}%" if total else "–"])
+    return ("![Distribution of B2 and B3 answers](scale_use.png)\n\n"
+            + md_table(["Q", "Who", "n", "1", "2", "3", "4", "5", "share of 3", "share of 1 or 5"], rows))
 
 
-def section_scores(scores, versions):
+SCORE_COLS = [("B3_mae", "B3 MAE ↓ (primary)"), ("B2_abs_error", "B2 abs. error ↓"),
+              ("B4_jaccard", "B4 Jaccard ↑"), ("B5_jaccard", "B5 Jaccard ↑"), ("B6_jaccard", "B6 Jaccard ↑")]
+
+
+def section_scores(scores, versions, codebook):
     cells, sp = scores["cells"], scores["spearman_B2"]
     rho = {(s["participant"], s["version"]): s for s in sp}
     rows = []
-    groups = defaultdict(list)
-    for c in cells:
-        groups[(c["participant"], c["version"])].append(c)
-    keys = ["B2_abs_error", "B3_mae"] + [f"{b}_jaccard" for b in LISTS]
     for pid in sorted({c["participant"] for c in cells}):
         for v in versions:
-            g = groups.get((pid, v), [])
-            if not g:
-                continue
             r = rho.get((pid, v), {})
-            rows.append([pid, v, fmt(r.get("rho")) + (f" ({r['note']})" if r.get("note") else "")]
-                        + [fmt(statistics.mean(c[k] for c in g)) for k in keys])
+            rows.append([pid, v] + [fmt(by_version(cells, k, v, pid)) for k, _ in SCORE_COLS]
+                        + [fmt(r.get("rho")) + (f" ({r['note']})" if r.get("note") else "")])
     for v in versions:
-        g = [c for c in cells if c["version"] == v]
-        if g:
-            rhos = [s["rho"] for s in sp if s["version"] == v and s["rho"] is not None]
-            rows.append(["**all**", f"**{v}**", fmt(statistics.mean(rhos)) if rhos else "–"]
-                        + [f"**{fmt(statistics.mean(c[k] for c in g))}**" for k in keys])
-    head = ["Participant", "Version", "B2 Spearman ρ (4 places) ↑", "B2 abs. error ↓", "B3 MAE ↓",
-            "B4 Jaccard ↑", "B5 Jaccard ↑", "B6 Jaccard ↑", "B7 Jaccard ↑"]
-    return ("Scores per participant and version, averaged over places and runs. ↑ higher is better, "
-            "↓ lower is better. Errors are on the 1–5 scale; Jaccard is 0 (no overlap) to 1 (same selection).\n\n"
-            + md_table(head, rows))
+        rows.append(["**all**", f"**{v}**"] + [f"**{fmt(by_version(cells, k, v))}**" for k, _ in SCORE_COLS]
+                    + [fmt(mean([s["rho"] for s in sp if s["version"] == v]))])
+    base = [("avg_human", "average human (leave-one-out)"), ("chance", "chance (random valid answers)"),
+            ("copy", "copy Part A (Q14, Q15, Q16)"), ("const3", "B2 always 3")]
+    for name, label in base:
+        rows.append([f"*{label}*", ""] + [fmt(baseline_mean(scores, name, k)) for k, _ in SCORE_COLS] + [""])
+    main = md_table(["Participant", "Version"] + [h for _, h in SCORE_COLS] + ["B2 Spearman ρ (places) ↑"], rows)
+
+    # precision / recall per question, and per sense / factor
+    pr_rows = [[v] + [f"{fmt(by_version(cells, f'{b}_precision', v))} / {fmt(by_version(cells, f'{b}_recall', v))}"
+                      for b in LISTS] for v in versions]
+    pr_rows.append(["*chance*"] + [f"{fmt(baseline_mean(scores, 'chance', f'{b}_precision'))} / "
+                                   f"{fmt(baseline_mean(scores, 'chance', f'{b}_recall'))}" for b in LISTS])
+    pr = md_table(["Version", "B4 precision / recall", "B5 precision / recall", "B6 precision / recall"], pr_rows)
+
+    factor_rows = []
+    for r in codebook["part_b"]["B3"]["rows"]:
+        factor_rows.append([f"{r['factor']} ({r['code']})"] + [fmt(by_version(cells, f"B3_err_{r['code']}", v))
+                                                               for v in versions])
+    factors = md_table(["B3 row (factor)"] + [f"{v} error ↓" for v in versions], factor_rows)
+
+    code_rows = []
+    pc = scores["per_code"]
+    for bid in LISTS:
+        for opt in codebook["part_b"][bid]["options"]:
+            tag = opt.get("sense") or opt.get("factor")
+            if not tag:
+                continue
+            cellv = []
+            for v in versions:
+                e = next((x for x in pc if x["version"] == v and x["question"] == bid and x["code"] == opt["code"]), None)
+                cellv.append("–" if not e else f"{fmt(e['precision'])} / {fmt(e['recall'])}")
+            code_rows.append([bid, tag] + cellv)
+    codes = md_table(["Q", "sense / factor"] + [f"{v} precision / recall" for v in versions], code_rows)
+
+    return ("Scores per participant and version, averaged over places and runs, with the baselines below "
+            "(scored the same way). ↑ higher is better, ↓ lower is better. A version is only useful where it beats "
+            "the baselines.\n\n" + main
+            + "\n\n**B4–B6 precision / recall.** Precision = share of the persona's picks the person also made; "
+              "recall = share of the person's picks the persona found.\n\n" + pr
+            + "\n\n**B3 by factor** (error per situation row).\n\n" + factors
+            + "\n\n<details><summary>B4–B6 per sense and per factor (precision / recall)</summary>\n\n"
+            + codes + "\n\n</details>")
 
 
-FIXED_LAST = {"none", "none_in_particular", "no_change_needed", "other"}  # never shuffled
+def section_copy(scores, versions):
+    cells = scores["cells"]
+    rows = [[v, fmt(by_version(cells, "B3_mae", v)), fmt(by_version(cells, "B3_vs_Q14", v)),
+             fmt(by_version(cells, "B4_jaccard", v)), fmt(by_version(cells, "B5_jaccard", v))] for v in versions]
+    rows.append(["**copy Part A, no model**", f"**{fmt(baseline_mean(scores, 'copy', 'B3_mae'))}**", "0.00",
+                 f"**{fmt(baseline_mean(scores, 'copy', 'B4_jaccard'))}**",
+                 f"**{fmt(baseline_mean(scores, 'copy', 'B5_jaccard'))}**"])
+    return ("B3 asks the same 4 situations as Q14, B4 the same sense codes as Q15, B5 as Q16. The last row is what "
+            "you get by copying the person's Part A answers onto every place, with no model and no photo. A version "
+            "shows perception of the place only where it beats that row. *B3 distance to own Q14*: near 0 = the "
+            "persona copies the profile instead of judging the place.\n\n"
+            + md_table(["Version", "B3 error vs person ↓", "B3 distance to own Q14", "B4 Jaccard ↑", "B5 Jaccard ↑"],
+                       rows))
 
 
-def mean_of(cells, key, version):
-    vals = [c[key] for c in cells if c["version"] == version and c.get(key) is not None]
-    return statistics.mean(vals) if vals else None
+def section_bias(scores, versions):
+    cells = scores["cells"]
+    pids = sorted({c["participant"] for c in cells})
+    rows = [[v, fmt(by_version(cells, "B2_signed", v)), fmt(by_version(cells, "B3_signed", v))]
+            + [f"{fmt(by_version(cells, 'B2_signed', v, p))} / {fmt(by_version(cells, 'B3_signed', v, p))}"
+               for p in pids] for v in versions]
+    return ("Signed error, persona − person. **B2:** negative = the persona feels *less comfortable* than the "
+            "person. **B3:** positive = the persona sees *more problems*. Near 0 = no systematic shift.\n\n"
+            + md_table(["Version", "B2 signed (all)", "B3 signed (all)"] + [f"{p}: B2 / B3" for p in pids], rows))
 
 
-def section_bias_copy_diversity(scores, versions):
-    cells, base, div = scores["cells"], scores["baselines"], scores["diversity"]
-
-    def base_mean(key):
-        vals = [b[key] for b in base if b[key] is not None]
-        return statistics.mean(vals) if vals else None
-
-    # bias
-    bias_rows = [[v, fmt(mean_of(cells, "B2_signed", v)), fmt(mean_of(cells, "B3_signed", v))] for v in versions]
-    bias = ("**Bias** = signed error, persona − person, averaged over participants, places and runs. "
-            "**B2:** negative = the persona feels *less comfortable* than the person. "
-            "**B3:** positive = the persona sees *more problems* than the person. "
-            "Near 0 = no systematic shift (errors may still be large in both directions; see section 3).\n\n"
-            + md_table(["Version", "B2 signed error", "B3 signed error"], bias_rows))
-
-    # copying the profile
-    copy_rows = [[v, fmt(mean_of(cells, "B3_mae", v)), fmt(mean_of(cells, "B3_vs_Q15", v)),
-                  fmt(mean_of(cells, "B4_jaccard", v))] for v in versions]
-    copy_rows.append(["**profile only, no model**", f"**{fmt(base_mean('B3_copy_Q15_mae'))}**", "0.00",
-                      f"**{fmt(base_mean('B4_copy_Q16_jaccard'))}**"])
-    copy = ("**Copying the profile.** B3 asks the same 4 situations as Q15, and Q15 is in the V2/V3 persona "
-            "text; B4 asks the same senses as Q16. The last row is what you get with no model and no photo: "
-            "B3 = the person's own Q15 answers for every place, B4 = the 3 senses they rated highest in Q16. "
-            "A version only shows perception of the place if it does **better** than this row. "
-            "*B3 distance to Q15*: how close the persona's B3 is to the person's Q15 (near 0 = it copies the "
-            "profile instead of judging the place).\n\n"
-            + md_table(["Version", "B3 error vs person ↓", "B3 distance to own Q15", "B4 Jaccard ↑"], copy_rows)
-            + f"\n\nFor B2, always answering 3 gives an error of **{fmt(base_mean('B2_const3_abs_error'))}** "
-              "(compare with section 3).")
-
-    # diversity
-    div_rows = []
+def section_diversity(scores, versions):
+    div = scores["diversity"]
+    if not div:
+        return "Needs at least 2 participants."
+    rows = []
     for who in ["Humans"] + versions:
         d = div.get(who)
-        if not d:
-            continue
-        name = f"**{who}**" if who == "Humans" else who
-        div_rows.append([name, fmt(d["B2_sd_between"]), fmt(d["B3_sd_between"])]
+        if d:
+            rows.append([f"**{who}**" if who == "Humans" else who, fmt(d["B2_sd_between"]), fmt(d["B3_sd_between"])]
                         + [fmt(d[f"{b}_jaccard_between"]) for b in LISTS])
-    diversity = ("**Diversity** = how much the answers differ *between participants* for the same place. "
-                 "SD across participants for B2/B3 (higher = more different); Jaccard between participants "
-                 "for B4–B7 (lower = more different). A version is as diverse as the people when its row is "
-                 "close to the Humans row; a version that gives everyone the same answer has SD near 0 and "
-                 "Jaccard near 1. Diversity alone is not accuracy: random answers are diverse too.\n\n"
-                 + md_table(["Who", "B2 SD between", "B3 SD between", "B4 Jaccard between",
-                             "B5 Jaccard between", "B6 Jaccard between", "B7 Jaccard between"], div_rows))
-    return f"{bias}\n\n{copy}\n\n{diversity}"
+    return ("How much answers differ *between participants* for the same place: SD for B2/B3 (higher = more "
+            "different), Jaccard for B4–B6 (lower = more different). Close to the Humans row = the version "
+            "differentiates people as much as they differ. Diversity alone is not accuracy.\n\n"
+            + md_table(["Who", "B2 SD between", "B3 SD between", "B4 Jaccard between", "B5 Jaccard between",
+                        "B6 Jaccard between"], rows))
 
 
-def position_bias(calls):
-    """Mean relative position (0 = first shown, 1 = last) of the chosen codes among the shuffled options."""
-    out = {}
-    for bid, key in LISTS.items():
-        pos = []
-        for c in calls:
-            if not c["valid"]:
+def section_2x2(scores, versions):
+    cells = scores["cells"]
+
+    def avg(key, v):
+        return by_version(cells, key, v)
+    rows = []
+    for factor, comparisons in EFFECTS.items():
+        for without, with_, context in comparisons:
+            if without not in versions or with_ not in versions:
                 continue
-            order = [code for code in c["option_order"][bid] if code not in FIXED_LAST]
-            n = len(order)
-            for code in c["parsed"][key]:
-                if code in order:
-                    pos.append(order.index(code) / (n - 1) if n > 1 else 0.5)
-        out[bid] = (statistics.mean(pos), len(pos)) if pos else (None, 0)
-    return out
+            rows.append([f"+ {factor}", context, f"{without} → {with_}",
+                         f"{avg('B3_mae', with_) - avg('B3_mae', without):+.2f}",
+                         f"{avg('B2_abs_error', with_) - avg('B2_abs_error', without):+.2f}",
+                         f"{abs(avg('B3_signed', with_)) - abs(avg('B3_signed', without)):+.2f}",
+                         f"{abs(avg('B2_signed', with_)) - abs(avg('B2_signed', without)):+.2f}"])
+    return ("Each row adds one factor while the other stays fixed. In every column, **negative = better** "
+            "(closer to the person, or less systematic shift). Main comparison for the thesis: **V1 vs V3**.\n\n"
+            "| | No lived experience | Lived experience (Q13–Q20) |\n|---|---|---|\n"
+            "| **No labels** | V0 | V3 |\n| **Labels (Q1–Q5, Q7–Q12)** | V1 | V2 |\n\n"
+            + md_table(["Adding", "", "Versions", "B3 MAE change", "B2 abs. error change", "B3 bias change",
+                        "B2 bias change"], rows)
+            + (f"\n\n**V1 vs V3** (labels only vs lived experience only): B3 MAE {fmt(avg('B3_mae', 'V1'))} vs "
+               f"{fmt(avg('B3_mae', 'V3'))}; B3 bias {fmt(avg('B3_signed', 'V1'))} vs {fmt(avg('B3_signed', 'V3'))}."
+               if "V1" in versions and "V3" in versions else ""))
 
 
-def section_stability(scores, calls, versions):
+def section_pairs(scores, versions):
+    cells = {(c["participant"], c["place"], c["version"]): c for c in scores["cells"]}
+    pairs = [(a, b) for i, a in enumerate(versions) for b in versions[i + 1:]]
+    beyond, total, detail = Counter(), Counter(), []
+    for pid in sorted({c["participant"] for c in scores["cells"]}):
+        for place in scores["places"]:
+            for a, b in pairs:
+                ca, cb = cells.get((pid, place, a)), cells.get((pid, place, b))
+                if not ca or not cb:
+                    continue
+                d2, n2 = abs(ca["B2_mean"] - cb["B2_mean"]), max(ca["B2_range"], cb["B2_range"])
+                d3, n3 = abs(ca["B3_mean"] - cb["B3_mean"]), max(ca["B3_range"], cb["B3_range"])
+                beyond[(a, b, "B2")] += d2 > n2
+                beyond[(a, b, "B3")] += d3 > n3
+                total[(a, b)] += 1
+                detail.append([pid, place, f"{a} vs {b}", f"{fmt(d2)} vs {fmt(n2)}", "**yes**" if d2 > n2 else "no",
+                               f"{fmt(d3)} vs {fmt(n3)}", "**yes**" if d3 > n3 else "no"])
+    summary = md_table(["Versions", "B2: differs beyond noise", "B3: differs beyond noise"],
+                       [[f"{a} vs {b}", f"{beyond[(a, b, 'B2')]}/{total[(a, b)]}",
+                         f"{beyond[(a, b, 'B3')]}/{total[(a, b)]}"] for a, b in pairs])
+    return ("For each participant and place: the difference between two versions' mean answers vs the run-to-run "
+            "noise (with 2 runs: the difference between the two runs, the larger of the two versions'). "
+            "A difference counts only if it is larger than the noise.\n\n" + summary
+            + "\n\n<details><summary>Every comparison</summary>\n\n"
+            + md_table(["Participant", "Place", "Versions", "B2: difference vs noise", "beyond?",
+                        "B3 mean: difference vs noise", "beyond?"], detail) + "\n\n</details>")
+
+
+def section_b2_people(scores, versions, codebook):
+    sp = {(s["participant"], s["version"]): s for s in scores["spearman_B2"]}
+    names = codebook.get("place_names") or []
+    rows = []
+    for pid in sorted({s["participant"] for s in scores["spearman_B2"]}):
+        any_v = next(sp[(pid, v)] for v in versions if (pid, v) in sp)
+        rows.append([pid, "**person**"] + [str(x) for x in any_v["human_B2"]] + [""])
+        for v in versions:
+            s = sp.get((pid, v))
+            if s:
+                rows.append(["", v] + [fmt(x, 1) for x in s["persona_B2_mean"]] + [fmt(s["rho"])])
+    head = ["Participant", "Who"] + [f"{pl}{' ' + names[i] if i < len(names) else ''}"
+                                     for i, pl in enumerate(scores["places"])] + ["ρ"]
+    return ("Each person's B2 (comfort) per place, next to each version's mean over runs, to see where the order "
+            "of places is right or reversed.\n\n" + md_table(head, rows))
+
+
+def section_language(scores, versions, humans):
+    by_lang = defaultdict(list)
+    for pid, p in humans.items():
+        by_lang[p["lang"]].append(pid)
+    langs = ", ".join(f"{pid}: {p['lang']}" for pid, p in sorted(humans.items()))
+    if len(by_lang) < 2:
+        return (f"Form language per participant: {langs}. Only one language so far, so the it/en comparison "
+                "is not possible yet.")
     cells = scores["cells"]
     rows = []
-    for v in versions:
-        g = [c for c in cells if c["version"] == v]
-        if not g:
-            continue
-        rows.append([v, fmt(statistics.mean(c["B2_sd"] for c in g)),
-                     f"{sum(c['B2_range'] == 0 for c in g)}/{len(g)}",
-                     fmt(statistics.mean(c["B3_sd"] for c in g))]
-                    + [fmt(statistics.mean(c[f"{b}_run_agreement"] for c in g
-                                           if c[f"{b}_run_agreement"] is not None)) for b in LISTS])
-    table = md_table(["Version", "B2 SD over runs", "places with identical B2 in all runs", "B3 SD over runs",
-                      "B4 run agreement", "B5 run agreement", "B6 run agreement", "B7 run agreement"], rows)
-    bias = position_bias(calls)
-    bias_rows = [[b, fmt(m), n] for b, (m, n) in bias.items()]
-    return (f"Run-to-run spread within each participant × version × place (3 runs), averaged. "
-            f"Run agreement = mean Jaccard between the runs' selections (1 = identical choices every run).\n\n{table}\n\n"
-            "**Option order.** B4–B7 options were shuffled in every call. If the shown order did not matter, the "
-            "chosen options would sit on average in the middle of the shuffled list (0.50; 0 = first, 1 = last). "
-            "Values well below 0.50 mean the model tends to pick options shown first.\n\n"
-            + md_table(["Question", "mean relative position of chosen options", "choices"], bias_rows))
+    for lang, pids in sorted(by_lang.items()):
+        for v in versions:
+            g = [c for c in cells if c["version"] == v and c["participant"] in pids]
+            rows.append([lang, len(pids), v, fmt(mean([c.get("B3_mae") for c in g])),
+                         fmt(mean([c.get("B2_abs_error") for c in g]))])
+    return (f"Form language per participant: {langs}. Open answers stay untranslated; this checks that they "
+            "don't hurt.\n\n" + md_table(["Language", "participants", "Version", "B3 MAE ↓", "B2 abs. error ↓"], rows))
 
 
-def section_time_cost(calls, versions):
-    secs = [c["seconds"] for c in calls]
-    costs = [c["cost"] for c in calls]
-    med, mx = statistics.median(secs), max(secs)
-    mean_cost = statistics.mean(costs)
-    lines = [f"- Seconds per call (incl. retries): median **{med:.1f}**, max {mx:.1f}.",
-             f"- Cost per call: mean **${mean_cost:.4f}**; total ${sum(costs):.4f} for {len(calls)} calls."]
-    for nv in sorted({3, len(versions)}):
-        n = N_PARTICIPANTS_FULL * N_PLACES * N_RUNS * nv
-        lines.append(f"- Projection for {N_PARTICIPANTS_FULL} participants × {N_PLACES} places × {N_RUNS} runs × "
-                     f"{nv} versions = {n} calls: about **${n * mean_cost:.2f}** and "
-                     f"**{n * med / 3600:.1f} h** one call at a time.")
-    if any(c is None for c in costs) or sum(costs) == 0:
-        lines.append("- ⚠ Some calls reported no cost: the cost cap could not be enforced for them.")
-    return "\n".join(lines)
+def section_leaks(leaks):
+    flagged = {pid: h for pid, h in leaks.items() if h}
+    if not flagged:
+        return ("No V3 prompt contains a diagnosis keyword in the person's own words (Q20, \"Other\" texts): "
+                "V3 is free of explicit labels for every participant.")
+    return ("V3 prompts whose own-words text (Q20, \"Other\") names a diagnosis or condition. The words stay "
+            "verbatim; check these participants separately in the analysis.\n\n"
+            + md_table(["Participant", "Question", "Keywords"],
+                       [[pid, h["question"], ", ".join(h["keywords"])] for pid, hs in flagged.items() for h in hs]))
+
+
+def section_time_cost(calls, codebook):
+    secs, costs = [c["seconds"] for c in calls], [c["cost"] for c in calls]
+    med, mean_cost = statistics.median(secs), statistics.mean(costs)
+    n = N_PARTICIPANTS_FULL * codebook["places"] * len(VERSIONS_ALL) * N_RUNS_FULL
+    return "\n".join([
+        f"- Seconds per call (incl. retries): median **{med:.1f}**, max {max(secs):.1f}.",
+        f"- Cost per call: mean **${mean_cost:.4f}**; total ${sum(costs):.4f} for {len(calls)} calls.",
+        f"- Projection for {N_PARTICIPANTS_FULL} participants × {codebook['places']} places × {len(VERSIONS_ALL)} "
+        f"versions × {N_RUNS_FULL} runs = {n} calls: about **${n * mean_cost:.2f}** and **{n * med / 3600:.1f} h** "
+        "one call at a time."])
 
 
 def reasoning_samples(calls, versions, path):
-    out = ["# Reasoning samples", "",
-           "Not committed to git: persona reasoning can repeat a participant's health information.", ""]
+    out = ["# Reasoning samples", "", "Not committed to git: persona reasoning can repeat health information.", ""]
     for pid in sorted({c["participant"] for c in calls}):
         out.append(f"## {pid}, place P1, run 1")
         for v in versions:
             c = next((c for c in calls if c["participant"] == pid and c["version"] == v and c["place"] == "P1"
                       and c["run"] == 1 and c["valid"]), None)
-            text = c["parsed"]["reasoning"] if c else "(no valid answer)"
-            out += [f"**{v}**", "", f"> {text}", ""]
+            out += [f"**{v}**", "", f"> {c['parsed']['reasoning'] if c else '(no valid answer)'}", ""]
     path.write_text("\n".join(out), encoding="utf-8")
 
 
-# the 2 x 2 design: (without, with) pairs for each factor
-EFFECTS = {
-    "Labels": [("V0", "V1", "without sensory info"), ("V3", "V2", "with sensory info")],
-    "Sensory info": [("V0", "V3", "without labels"), ("V1", "V2", "with labels")],
-}
-
-
-def section_versions(scores, versions):
-    cells = {(c["participant"], c["place"], c["version"]): c for c in scores["cells"]}
-    pairs = [(a, b) for i, a in enumerate(versions) for b in versions[i + 1:]]
-
-    def avg(key, v):
-        return mean_of(scores["cells"], key, v)
-
-    # 2 x 2 view: what does adding each factor change?
-    effect_rows = []
-    for factor, comparisons in EFFECTS.items():
-        for without, with_, context in comparisons:
-            if without not in versions or with_ not in versions:
-                continue
-            d_b2 = avg("B2_abs_error", with_) - avg("B2_abs_error", without)
-            d_b3 = avg("B3_mae", with_) - avg("B3_mae", without)
-            d_bias2 = abs(avg("B2_signed", with_)) - abs(avg("B2_signed", without))
-            d_bias3 = abs(avg("B3_signed", with_)) - abs(avg("B3_signed", without))
-            effect_rows.append([f"+ {factor}", context, f"{without} → {with_}",
-                                f"{d_b2:+.2f}", f"{d_b3:+.2f}", f"{d_bias2:+.2f}", f"{d_bias3:+.2f}"])
-    effects = ("**2 × 2 view.** Each row adds one factor while the other stays fixed. "
-               "In every change column, **negative = better**: closer to the person (error) or less "
-               "systematic shift (bias = size of the signed error in section 4b).\n\n"
-               "|               | No sensory info | Sensory info |\n|---|---|---|\n"
-               "| **No labels** | V0 | V3 |\n| **Labels** | V1 | V2 |\n\n"
-               + md_table(["Adding", "", "Versions", "B2 abs. error change", "B3 MAE change",
-                           "B2 bias change", "B3 bias change"], effect_rows))
-    rows = []
-    beyond = Counter()
-    total = Counter()
-    for pid in sorted({c["participant"] for c in scores["cells"]}):
-        for place in [f"P{i}" for i in range(1, 5)]:
-            for a, b in pairs:
-                ca, cb = cells.get((pid, place, a)), cells.get((pid, place, b))
-                if not ca or not cb:
-                    continue
-                d2 = abs(ca["B2_mean"] - cb["B2_mean"])
-                noise2 = max(ca["B2_range"], cb["B2_range"])
-                d3 = abs(ca["B3_mean"] - cb["B3_mean"])
-                noise3 = max(ca["B3_sd"], cb["B3_sd"]) * 2
-                ok2, ok3 = d2 > noise2, d3 > noise3
-                beyond[(a, b, "B2")] += ok2
-                beyond[(a, b, "B3")] += ok3
-                total[(a, b)] += 1
-                rows.append([pid, place, f"{a} vs {b}",
-                             f"{fmt(d2)} vs {fmt(noise2)}", "**yes**" if ok2 else "no",
-                             f"{fmt(d3)} vs {fmt(noise3)}", "**yes**" if ok3 else "no"])
-    summary = md_table(["Comparison", "B2: differs beyond noise", "B3: differs beyond noise"],
-                       [[f"{a} vs {b}", f"{beyond[(a, b, 'B2')]}/{total[(a, b)]}",
-                         f"{beyond[(a, b, 'B3')]}/{total[(a, b)]}"] for a, b in pairs])
-    detail = md_table(["Participant", "Place", "Versions",
-                       "B2: |difference of means| vs noise", "beyond noise?",
-                       "B3: |difference of means| vs noise", "beyond noise?"], rows)
-    return (effects + "\n\n**Beyond run-to-run noise?** "
-            "For each participant and place, the difference between two versions' mean answers (over 3 runs) "
-            "is compared with the run-to-run noise. **B2 noise** = the larger of the two versions' ranges over runs "
-            "(max − min). **B3 noise** = twice the larger SD over runs of the mean B3 score. A difference counts "
-            "only if it is larger than the noise.\n\n" + summary
-            + "\n\n<details><summary>Every comparison</summary>\n\n" + detail + "\n\n</details>")
-
-
-def summary_bullets(calls, scores, dist, versions):
-    n = len(calls)
-    valid = sum(c["valid"] for c in calls)
-    retried = sum(1 for c in calls if len(answered(c)) > 1)
-    b = [f"**Pipeline:** {n} calls answered end to end; {valid}/{n} answers valid ({retried} needed a retry)."]
-    mids = {v: dist["B2"][v].get(3, 0) / max(sum(dist["B2"][v].values()), 1) for v in versions}
-    used = {v: sorted(k for k, x in dist["B2"][v].items() if x) for v in versions}
-    hm = dist["B2"]["Humans"]
-    b.append("**Scale use (B2):** humans used " + ", ".join(str(k) for k in sorted(hm) if hm[k])
-             + "; personas used " + "; ".join(f"{v}: {', '.join(map(str, used[v]))} ({100 * mids[v]:.0f}% 3s)"
-                                              for v in versions) + ".")
+def summary_bullets(calls, scores, dist, versions, humans):
     cells = scores["cells"]
-    err = {v: statistics.mean(c["B2_abs_error"] for c in cells if c["version"] == v) for v in versions}
-    b.append("**B2 error by version** (mean abs. error, 1–5 scale): "
-             + ", ".join(f"{v} {err[v]:.2f}" for v in versions)
-             + f". With {len({c["participant"] for c in calls})} participants this is a feasibility check, not a result.")
+    n, valid = len(calls), sum(c["valid"] for c in calls)
+    b = [f"**Pipeline:** {n} calls answered; {valid}/{n} valid "
+         f"({sum(1 for c in calls if len(answered(c)) > 1)} needed a retry)."]
+    b.append("**B3 (primary), mean error:** " + ", ".join(f"{v} {fmt(by_version(cells, 'B3_mae', v))}" for v in versions)
+             + f"; copy Part A {fmt(baseline_mean(scores, 'copy', 'B3_mae'))}, chance "
+               f"{fmt(baseline_mean(scores, 'chance', 'B3_mae'))}.")
+    b.append("**Bias (B3 signed):** " + ", ".join(f"{v} {fmt(by_version(cells, 'B3_signed', v))}" for v in versions)
+             + " (positive = persona sees more problems than the person).")
+    b.append("**Scale use (B2):** humans " + ", ".join(str(k) for k in sorted(dist["B2"]["Humans"]))
+             + "; " + "; ".join(f"{v} {', '.join(str(k) for k in sorted(dist['B2'][v]))}" for v in versions) + ".")
     costs = [c["cost"] for c in calls]
     b.append(f"**Time and cost:** median {statistics.median(c['seconds'] for c in calls):.1f} s and "
              f"${statistics.mean(costs):.4f} per call.")
+    b.append(f"With {len(humans)} participant{'s' if len(humans) != 1 else ''} this is a feasibility check, "
+             "not a result.")
     return b
 
 
@@ -413,42 +430,47 @@ def main():
     if not run_dirs:
         sys.exit(__doc__)
     sys.stdout.reconfigure(encoding="utf-8")
-    calls, api_errors, scores, configs, humans = load(run_dirs)
-    versions = [v for v in ("V0", "V1", "V2", "V3") if any(c["version"] == v for c in calls)]
+    calls, api_errors, scores, configs, study, humans, leaks = load(run_dirs)
+    codebook = study.codebook()
+    versions = [v for v in VERSIONS_ALL if any(c["version"] == v for c in calls)]
     out = run_dirs[0]
 
-    dist = scale_distributions(calls, humans, versions)
+    dist = scale_distributions(calls, humans, versions, scores["places"])
     chart_scale(dist, versions, out / "scale_use.png")
     reasoning_samples(calls, versions, out / "reasoning_samples.md")
 
     cfg = configs[0]
     header = [
-        "# Smoke test report",
+        f"# Pilot report: {study.name}",
         "",
-        f"`pilot: true` — feasibility check with {len(humans)} participants; no conclusions about the hypotheses.",
+        f"`pilot: true` — {len(humans)} participant{'s' if len(humans) != 1 else ''}; "
+        "no conclusions about the hypotheses.",
         "",
         f"- Runs: {', '.join(f'`{c['run_id']}`' for c in configs)}",
         f"- Model: `{cfg['model']}` · temperature {cfg['temperature']} · {cfg['runs_per_condition']} runs per "
-        f"condition · provider routing {cfg.get('provider')} · codebook {cfg.get('codebook_version')}",
-        f"- Versions: {', '.join(versions)} · participants: {len(humans)} · places: {N_PLACES}",
-        "",
-        "## Summary",
-        "",
-        *[f"- {x}" for x in summary_bullets(calls, scores, dist, versions)],
-        "- _To add after reading: what to fix before the real run (format, instructions, limits only)._",
+        f"condition · provider routing {cfg.get('provider')} · codebook {cfg.get('codebook')} "
+        f"(version {cfg.get('codebook_version')})",
+        f"- Versions: {', '.join(versions)} · participants: {len(humans)} · places: {codebook['places']}",
         "",
     ]
     sections = [
-        ("1. Format", section_format(calls, api_errors)),
-        ("2. Scale use", section_scale(dist, versions, "scale_use.png")),
-        ("3. Scores", section_scores(scores, versions)),
-        ("4. Stability", section_stability(scores, calls, versions)),
-        ("4b. Bias, copying the profile, diversity", section_bias_copy_diversity(scores, versions)),
-        ("5. Time and cost", section_time_cost(calls, versions)),
-        ("6. Reasoning samples", "For each participant, one reasoning per version for place P1, run 1, verbatim, "
-                                 "in [`reasoning_samples.md`](reasoning_samples.md) (kept out of git because "
-                                 "it can repeat health information)."),
-        ("7. Do the versions really differ?", section_versions(scores, versions)),
+        ("1. Summary", "\n".join(f"- {x}" for x in summary_bullets(calls, scores, dist, versions, humans))
+         + "\n- _To add after reading: what to fix before the real run (format, instructions, limits only)._"),
+        ("2. Format", section_format(calls, api_errors, codebook)),
+        ("3. Scale use", section_scale(dist, versions)),
+        ("4. Scores and baselines", section_scores(scores, versions, codebook)),
+        ("5. Copy check", section_copy(scores, versions)),
+        ("6. Bias", section_bias(scores, versions)),
+        ("7. Diversity", section_diversity(scores, versions)),
+        ("8. 2 × 2 view", section_2x2(scores, versions)),
+        ("9. Version pairs vs run-to-run noise", section_pairs(scores, versions)),
+        ("10. B2 per participant", section_b2_people(scores, versions, codebook)),
+        ("11. Language", section_language(scores, versions, humans)),
+        ("12. Label leaks", section_leaks(leaks)),
+        ("13. Time and cost", section_time_cost(calls, codebook)),
+        ("14. Reasoning samples", "One reasoning per version for place P1, run 1, verbatim, in "
+                                  "[`reasoning_samples.md`](reasoning_samples.md) (kept out of git: it can repeat "
+                                  "health information)."),
     ]
     body = "\n".join(header) + "\n" + "\n\n".join(f"## {t}\n\n{s}" for t, s in sections) + "\n"
     (out / "report.md").write_text(body, encoding="utf-8")

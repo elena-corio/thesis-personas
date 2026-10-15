@@ -777,7 +777,7 @@ part_b:
       sense: inner_sensations
     - code: space
       it: Meno traffico / zona pedonale
-      en: Less traffic / pedestrian zone
+      en: Less traffic or pedestrian zone
       factor: space
     - code: predictability
       it: Segnaletica e orientamento più chiari
