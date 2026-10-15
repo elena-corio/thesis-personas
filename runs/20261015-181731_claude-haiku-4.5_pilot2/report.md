@@ -136,6 +136,15 @@ Signed error, persona − person. **B2:** negative = the persona feels *less com
 | V2 | -0.33 | 0.08 | -0.33 / 0.08 |
 | V3 | 0.00 | 0.04 | 0.00 / 0.04 |
 
+**By neurodivergence (Q8).** If labels trigger a stereotype, V1's shift (B2 negative, B3 positive) should appear in the first group and not in the second, and V2/V3 should reduce it.
+
+| Group (Q8) | participants | Version | B2 signed | B3 signed |
+|---|---|---|---|---|
+| neurodivergent or not sure | 1 | V0 | 0.25 | -0.46 |
+| neurodivergent or not sure | 1 | V1 | 0.17 | -0.15 |
+| neurodivergent or not sure | 1 | V2 | -0.33 | 0.08 |
+| neurodivergent or not sure | 1 | V3 | 0.00 | 0.04 |
+
 ## 7. Diversity
 
 Needs at least 2 participants.

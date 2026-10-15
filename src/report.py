@@ -251,15 +251,37 @@ def section_copy(scores, versions):
                        rows))
 
 
-def section_bias(scores, versions):
+ND_GROUPS = {  # by Q8: does the profile carry a neurodivergence label?
+    "neurodivergent or not sure": {"yes", "not_sure"},
+    "not neurodivergent": {"no"},
+    "prefer not to say": {"prefer_not_to_say"},
+}
+
+
+def section_bias(scores, versions, humans):
     cells = scores["cells"]
     pids = sorted({c["participant"] for c in cells})
     rows = [[v, fmt(by_version(cells, "B2_signed", v)), fmt(by_version(cells, "B3_signed", v))]
             + [f"{fmt(by_version(cells, 'B2_signed', v, p))} / {fmt(by_version(cells, 'B3_signed', v, p))}"
                for p in pids] for v in versions]
+
+    # stereotyping check: labels (V1) should shift answers only where the labels name a neurodivergence
+    group_rows = []
+    for group, answers in ND_GROUPS.items():
+        members = [p for p in pids if humans[p]["part_a"].get("Q8") in answers]
+        if not members:
+            continue
+        for v in versions:
+            g = [c for c in cells if c["version"] == v and c["participant"] in members]
+            group_rows.append([group, len(members), v, fmt(mean([c.get("B2_signed") for c in g])),
+                               fmt(mean([c.get("B3_signed") for c in g]))])
+    groups = ("**By neurodivergence (Q8).** If labels trigger a stereotype, V1's shift (B2 negative, B3 positive) "
+              "should appear in the first group and not in the second, and V2/V3 should reduce it.\n\n"
+              + md_table(["Group (Q8)", "participants", "Version", "B2 signed", "B3 signed"], group_rows))
     return ("Signed error, persona − person. **B2:** negative = the persona feels *less comfortable* than the "
             "person. **B3:** positive = the persona sees *more problems*. Near 0 = no systematic shift.\n\n"
-            + md_table(["Version", "B2 signed (all)", "B3 signed (all)"] + [f"{p}: B2 / B3" for p in pids], rows))
+            + md_table(["Version", "B2 signed (all)", "B3 signed (all)"] + [f"{p}: B2 / B3" for p in pids], rows)
+            + "\n\n" + groups)
 
 
 def section_diversity(scores, versions):
@@ -460,7 +482,7 @@ def main():
         ("3. Scale use", section_scale(dist, versions)),
         ("4. Scores and baselines", section_scores(scores, versions, codebook)),
         ("5. Copy check", section_copy(scores, versions)),
-        ("6. Bias", section_bias(scores, versions)),
+        ("6. Bias", section_bias(scores, versions, humans)),
         ("7. Diversity", section_diversity(scores, versions)),
         ("8. 2 × 2 view", section_2x2(scores, versions)),
         ("9. Version pairs vs run-to-run noise", section_pairs(scores, versions)),
