@@ -1,0 +1,829 @@
+version: '2026-10-14'
+scenario:
+  it: Guarda la foto e immagina di trascorrere qui 20 minuti in un pomeriggio feriale.
+  en: Look at the photo and imagine spending 20 minutes here on a weekday afternoon.
+persona_versions:
+  V0: 'No persona: the default model answers as "a person".'
+  V1: 'Labels: Q1–Q5 and Q7–Q11.'
+  V2: 'Grounded: everything in V1 plus Q12–Q22 (attention-check row removed).'
+  V3: 'Lived experience only: V0 plus Q12–Q22, without the V1 labels (demographics, health, neurodivergence).'
+  analysis_only: Q6 and B1 are never given to any persona.
+part_a:
+  Q1:
+    type: single
+    text_en: Age
+    persona: V1
+    options:
+    - code: '18_24'
+      it: 18–24
+      en: 18–24
+    - code: '25_34'
+      it: 25–34
+      en: 25–34
+    - code: '35_44'
+      it: 35–44
+      en: 35–44
+    - code: '45_54'
+      it: 45–54
+      en: 45–54
+    - code: '55_64'
+      it: 55–64
+      en: 55–64
+    - code: 65_or_older
+      it: 65 o più
+      en: 65 or older
+  Q2:
+    type: single
+    text_en: Gender
+    persona: V1
+    options:
+    - code: woman
+      it: Donna
+      en: Woman
+    - code: man
+      it: Uomo
+      en: Man
+    - code: non_binary
+      it: Non binario
+      en: Non-binary
+    - code: prefer_not_to_say
+      it: Preferisco non rispondere
+      en: Prefer not to say
+      exclusive: true
+    - code: other
+      it: Altro
+      en: Other
+      free_text: true
+  Q3:
+    type: single
+    text_en: Country of residence
+    persona: V1
+    options:
+    - code: austria
+      it: Austria
+      en: Austria
+    - code: another_european_country
+      it: Altro paese europeo
+      en: Another European country
+    - code: outside_europe
+      it: Fuori dall'Europa
+      en: Outside Europe
+    - code: prefer_not_to_say
+      it: Preferisco non rispondere
+      en: Prefer not to say
+      exclusive: true
+  Q4:
+    type: single
+    text_en: Type of place lived in
+    persona: V1
+    options:
+    - code: large_city
+      it: Grande città (oltre 500.000 abitanti)
+      en: Large city (over 500,000 inhabitants)
+    - code: medium_sized_city
+      it: Città media (50.000–500.000 abitanti)
+      en: Medium-sized city (50,000–500,000)
+    - code: small_town
+      it: Piccola città (5.000–50.000 abitanti)
+      en: Small town (5,000–50,000)
+    - code: village_or_countryside
+      it: Paese o campagna (meno di 5.000 abitanti)
+      en: Village or countryside (under 5,000)
+    - code: i_move_around_a
+      it: Mi sposto spesso / non ho un luogo fisso
+      en: I move around a lot / no fixed place
+  Q5:
+    type: single
+    text_en: Highest education
+    persona: V1
+    options:
+    - code: secondary_school_or_less
+      it: Scuola secondaria o inferiore
+      en: Secondary school or less
+    - code: vocational_training
+      it: Formazione professionale
+      en: Vocational training
+    - code: bachelor_s_degree
+      it: Laurea triennale
+      en: Bachelor's degree
+    - code: master_s_degree
+      it: Laurea magistrale o a ciclo unico
+      en: Master's degree
+    - code: doctorate
+      it: Dottorato di ricerca
+      en: Doctorate (PhD)
+  Q6:
+    type: single
+    text_en: Familiarity with Vienna
+    persona: analysis_only
+    options:
+    - code: i_live_there_now
+      it: Ci vivo ora
+      en: I live there now
+    - code: i_lived_there_before
+      it: Ci ho vissuto in passato
+      en: I lived there before
+    - code: i_have_visited
+      it: L'ho visitata
+      en: I have visited
+    - code: i_have_never_been
+      it: Non ci sono mai stat*
+      en: I have never been there
+    note: Never given to any persona.
+  Q7:
+    type: multi
+    text_en: Health conditions that affect how they experience public spaces
+    persona: V1
+    options:
+    - code: migraine_or_headaches
+      it: Emicrania o mal di testa
+      en: Migraine or headaches
+    - code: epilepsy
+      it: Epilessia
+      en: Epilepsy
+    - code: asthma_or_other_breathing
+      it: Asma o altre difficoltà respiratorie
+      en: Asthma or other breathing difficulties
+    - code: allergies
+      it: Allergie (es. ai pollini)
+      en: Allergies (e.g. pollen)
+    - code: chronic_pain_or_fatigue
+      it: Dolore o stanchezza cronici
+      en: Chronic pain or fatigue
+    - code: mobility_or_walking_difficulties
+      it: Difficoltà motorie o a camminare
+      en: Mobility or walking difficulties
+    - code: strong_sensitivity_to_light
+      it: Forte sensibilità alla luce (fotofobia)
+      en: Strong sensitivity to light (photophobia)
+    - code: visual_impairment
+      it: Disabilità visiva
+      en: Visual impairment
+    - code: tinnitus_or_sensitivity_to
+      it: Acufene o ipersensibilità ai suoni (iperacusia)
+      en: Tinnitus or sensitivity to sound (hyperacusis)
+    - code: hearing_impairment
+      it: Disabilità uditiva
+      en: Hearing impairment
+    - code: anxiety_panic_attacks_or
+      it: Ansia, attacchi di panico o fobie (es. della folla o degli spazi aperti)
+      en: Anxiety, panic attacks or phobias (e.g. of crowds or open spaces)
+    - code: ptsd_or_cptsd
+      it: PTSD o CPTSD (disturbo da stress post-traumatico, anche complesso)
+      en: PTSD or CPTSD
+    - code: none_of_these
+      it: Nessuna di queste
+      en: None of these
+      exclusive: true
+    - code: prefer_not_to_say
+      it: Preferisco non rispondere
+      en: Prefer not to say
+      exclusive: true
+    - code: other
+      it: Altro
+      en: Other
+      free_text: true
+  Q8:
+    type: single
+    text_en: Neurodivergent (autistic, ADHD or other)
+    persona: V1
+    options:
+    - code: 'yes'
+      it: Sì
+      en: 'Yes'
+    - code: 'no'
+      it: 'No'
+      en: 'No'
+    - code: not_sure
+      it: Non so
+      en: Not sure
+    - code: prefer_not_to_say
+      it: Preferisco non rispondere
+      en: Prefer not to say
+      exclusive: true
+  Q9:
+    type: multi
+    text_en: Neurodivergence terms that describe them
+    persona: V1
+    options:
+    - code: autistic_person
+      it: Persona autistica
+      en: Autistic person
+    - code: adhd
+      it: ADHD
+      en: ADHD
+    - code: dyspraxia_dcd
+      it: Disprassia / DCD
+      en: Dyspraxia / DCD
+    - code: tourette_s_or_tic
+      it: Sindrome di Tourette o disturbo da tic
+      en: Tourette's or tic disorder
+    - code: sensory_processing_differences
+      it: Differenze nell'elaborazione sensoriale
+      en: Sensory processing differences
+    - code: learning_differences
+      it: Disturbi specifici dell'apprendimento (es. dislessia, discalculia)
+      en: Learning differences (e.g. dyslexia, dyscalculia)
+    - code: not_sure
+      it: Non so
+      en: Not sure
+    - code: prefer_not_to_say
+      it: Preferisco non rispondere
+      en: Prefer not to say
+      exclusive: true
+    - code: other
+      it: Altro
+      en: Other
+      free_text: true
+    note: Only asked if Q8 = Yes or Not sure.
+  Q10:
+    type: single
+    text_en: Basis of Q9
+    persona: V1
+    options:
+    - code: yes_formally_diagnosed
+      it: Sì, ho una diagnosi formale
+      en: Yes, formally diagnosed
+    - code: self_identified
+      it: Mi autoidentifico
+      en: Self-identified
+    - code: i_only_suspect_it
+      it: Ho solo un sospetto
+      en: I only suspect it
+    - code: waiting_for_an_assessment
+      it: Sono in attesa di una valutazione
+      en: Waiting for an assessment
+    - code: prefer_not_to_say
+      it: Preferisco non rispondere
+      en: Prefer not to say
+      exclusive: true
+  Q11:
+    type: single
+    text_en: Support needed in daily life
+    persona: V1
+    options:
+    - code: none
+      it: Nessuno
+      en: None
+      exclusive: true
+    - code: some
+      it: Un po'
+      en: Some
+    - code: a_lot
+      it: Molto
+      en: A lot
+    - code: a_great_deal
+      it: Moltissimo
+      en: A great deal
+    - code: prefer_not_to_say
+      it: Preferisco non rispondere
+      en: Prefer not to say
+      exclusive: true
+  Q12:
+    type: single
+    text_en: Meltdown or shutdown in public spaces
+    persona: V2
+    options:
+    - code: never
+      it: Mai
+      en: Never
+    - code: sometimes
+      it: Qualche volta
+      en: Sometimes
+    - code: often
+      it: Spesso
+      en: Often
+    - code: prefer_not_to_say
+      it: Preferisco non rispondere
+      en: Prefer not to say
+      exclusive: true
+  Q13:
+    type: multi
+    text_en: What helps during a meltdown or shutdown
+    persona: V2
+    options:
+    - code: a_quiet_place_to
+      it: Un posto tranquillo dove allontanarmi
+      en: A quiet place to step away
+    - code: being_able_to_leave
+      it: Poter uscire subito dal luogo
+      en: Being able to leave quickly
+    - code: headphones_or_earplugs
+      it: Cuffie o tappi per le orecchie
+      en: Headphones or earplugs
+    - code: lower_light_or_shade
+      it: Luce più bassa o ombra
+      en: Lower light or shade
+    - code: being_able_to_sit
+      it: Potermi sedere o sdraiare
+      en: Being able to sit or lie down
+    - code: a_trusted_person_nearby
+      it: Una persona di fiducia vicino
+      en: A trusted person nearby
+    - code: people_who_understand_neurodivergence
+      it: Persone che conoscono la neurodivergenza e sanno come aiutare
+      en: People who understand neurodivergence and know how to help
+    - code: being_alone
+      it: Restare da sol*
+      en: Being alone
+    - code: moving
+      it: Muovermi (camminare, dondolarmi)
+      en: Moving (walking, rocking)
+    - code: drinking_or_eating_something
+      it: Bere o mangiare qualcosa
+      en: Drinking or eating something
+    - code: this_doesn_t_happen
+      it: Non mi capita
+      en: This doesn't happen to me
+      exclusive: true
+    - code: prefer_not_to_say
+      it: Preferisco non rispondere
+      en: Prefer not to say
+      exclusive: true
+    - code: other
+      it: Altro
+      en: Other
+      free_text: true
+  Q14:
+    type: scale_1_5
+    text_en: How often they feel overwhelmed in public spaces (1 = never, 5 = almost always)
+    persona: V2
+  Q15:
+    type: grid_1_5
+    text_en: How much each situation makes it hard to be in a public space (1 = not at all, 5 = very much)
+    persona: V2
+    rows:
+    - code: sensory_overload
+      it: Troppi stimoli sensoriali (rumore, luce, odori, caldo)
+      en: Too much sensory input (noise, light, smells, heat)
+    - code: crowded_chaotic_narrow
+      it: Luoghi affollati, caotici o stretti
+      en: Crowded, chaotic or narrow places
+    - code: uncertainty
+      it: Incertezza su cosa aspettarsi (luoghi sconosciuti o che cambiano)
+      en: Uncertainty about what to expect (unfamiliar or changing places)
+    - code: no_place_to_retreat
+      it: Mancanza di un posto dove allontanarsi, riposare o riprendersi
+      en: Lack of a place to step away, rest or recover
+  Q16:
+    type: grid_1_5
+    text_en: How much each sense influences their experience of public spaces, positively or negatively (1 = not at all, 5
+      = very much)
+    persona: V2
+    rows:
+    - code: hearing
+      it: Udito (suoni, rumori)
+      en: Hearing (sounds, noise)
+    - code: sight
+      it: Vista (luce, colori, ciò che vedi)
+      en: Sight (light, colours, what you see)
+    - code: smell
+      it: Olfatto (odori, profumi)
+      en: Smell (odours, scents)
+    - code: touch
+      it: Tatto (superfici, caldo o freddo sulla pelle)
+      en: Touch (surfaces, heat or cold on the skin)
+    - code: balance
+      it: Equilibrio (movimento, terreno irregolare, folla in movimento)
+      en: Balance (movement, uneven ground, moving crowds)
+    - code: proprioception
+      it: Percezione del corpo nello spazio (valutare le distanze, urtare cose o persone)
+      en: Sense of your body in space (judging distances, bumping into things or people)
+    - code: interoception
+      it: Sensazioni interne (sete, caldo nel corpo, stanchezza, bisogno del bagno)
+      en: Inner sensations (thirst, feeling hot inside, tiredness, needing the toilet)
+    attention_check:
+      it: 'Controllo: per questa riga seleziona 2'
+      expected: 2
+      note: 'Not a sense: drop from persona; participant fails check if value != 2.'
+  Q17:
+    type: multi
+    text_en: Elements that bother them
+    persona: V2
+    options:
+    - code: traffic_noise
+      it: Rumore del traffico
+      en: Traffic noise
+    - code: sudden_loud_sounds
+      it: Rumori forti e improvvisi (sirene, cantieri)
+      en: Sudden loud sounds (sirens, construction)
+    - code: many_voices_and_chatter
+      it: Tante voci e chiacchiericcio
+      en: Many voices and chatter
+    - code: harsh_or_flickering_artificial
+      it: Luce artificiale forte o tremolante (es. LED)
+      en: Harsh or flickering artificial light (e.g. LED)
+    - code: glaring_sun_or_reflections
+      it: Sole abbagliante o riflessi
+      en: Glaring sun or reflections
+    - code: signs_ads_and_visual
+      it: Insegne, pubblicità e confusione visiva
+      en: Signs, ads and visual clutter
+    - code: smell_of_smoke_exhaust
+      it: Odori di fumo, gas di scarico o rifiuti
+      en: Smell of smoke, exhaust fumes or rubbish
+    - code: smells_from_food_stalls
+      it: Odori dalle bancarelle o dai locali
+      en: Smells from food stalls or restaurants
+    - code: strong_sun_with_no
+      it: Sole forte senza ombra
+      en: Strong sun with no shade
+    - code: cold_or_wind
+      it: Freddo o vento
+      en: Cold or wind
+    - code: uneven_ground_or_steps
+      it: Terreno irregolare o gradini
+      en: Uneven ground or steps
+    - code: crowds_and_bikes_passing
+      it: Folla e biciclette che passano vicino
+      en: Crowds and bikes passing close
+    - code: nowhere_to_drink_or
+      it: Nessun posto per bere o andare in bagno
+      en: Nowhere to drink or find a toilet
+    - code: difficulty_reaching_the_place
+      it: Difficoltà a raggiungere il luogo (mezzi pubblici, distanza)
+      en: Difficulty reaching the place (public transport, distance)
+    - code: queues_and_waiting
+      it: File e attese
+      en: Queues and waiting
+    - code: none
+      it: Nessuno
+      en: None
+      exclusive: true
+    - code: other
+      it: Altro
+      en: Other
+      free_text: true
+  Q18:
+    type: multi
+    text_en: Elements that make them feel good
+    persona: V2
+    options:
+    - code: lively_busy_places
+      it: Luoghi vivaci e animati
+      en: Lively, busy places
+    - code: music_or_street_performers
+      it: Musica o artisti di strada
+      en: Music or street performers
+    - code: bright_colours_and_lights
+      it: Colori e luci vivaci
+      en: Bright colours and lights
+    - code: food_and_market_smells
+      it: Odori di cibo e di mercato
+      en: Food and market smells
+    - code: sun_and_warmth
+      it: Sole e calore
+      en: Sun and warmth
+    - code: greenery_nature_and_natural
+      it: Verde, natura e materiali naturali
+      en: Greenery, nature and natural materials
+    - code: water_and_natural_sounds
+      it: Acqua e suoni naturali
+      en: Water and natural sounds
+    - code: interesting_textures_to_touch
+      it: Superfici interessanti da toccare
+      en: Interesting textures to touch
+    - code: places_suited_to_movement
+      it: Luoghi adatti al movimento (camminare veloce, andare in altalena, arrampicarsi)
+      en: Places suited to movement (walking fast, using swings, climbing)
+    - code: quiet_corners
+      it: Angoli tranquilli
+      en: Quiet corners
+    - code: landmarks_and_frequent_signs
+      it: Punti di riferimento e indicazioni frequenti
+      en: Landmarks and frequent signs
+    - code: none
+      it: Nessuno
+      en: None
+      exclusive: true
+    - code: other
+      it: Altro
+      en: Other
+      free_text: true
+  Q19:
+    type: multi
+    text_en: What makes all sensations more intense
+    persona: V2
+    options:
+    - code: tiredness
+      it: Stanchezza
+      en: Tiredness
+    - code: stress_or_anxiety
+      it: Stress o ansia
+      en: Stress or anxiety
+    - code: heat_or_cold
+      it: Caldo o freddo
+      en: Heat or cold
+    - code: hunger_or_thirst
+      it: Fame o sete
+      en: Hunger or thirst
+    - code: constant_background_noise
+      it: Rumore di fondo continuo
+      en: Constant background noise
+    - code: being_in_a_hurry
+      it: Fretta o ritardo
+      en: Being in a hurry or late
+    - code: new_places
+      it: Luoghi nuovi
+      en: New places
+    - code: effort_of_the_journey
+      it: Fatica del viaggio
+      en: Effort of the journey
+    - code: feeling_unsafe
+      it: Sensazione di non essere al sicuro
+      en: Feeling unsafe
+    - code: none
+      it: Nessuna
+      en: None
+      exclusive: true
+    - code: other
+      it: Altro
+      en: Other
+      free_text: true
+  Q20:
+    type: multi
+    text_en: What they usually do when a place overwhelms them
+    persona: V2
+    options:
+    - code: go_home
+      it: Torno a casa
+      en: Go home
+    - code: use_headphones_earplugs_or
+      it: Uso cuffie, tappi per le orecchie o occhiali da sole
+      en: Use headphones, earplugs or sunglasses
+    - code: look_for_a_quieter
+      it: Cerco un posto più tranquillo
+      en: Look for a quieter spot
+    - code: take_breaks
+      it: Faccio delle pause
+      en: Take breaks
+    - code: plan_ahead
+      it: Pianifico in anticipo (percorsi, orari tranquilli)
+      en: Plan ahead (routes, quiet times)
+    - code: push_through
+      it: Resisto e vado avanti
+      en: Push through
+    - code: avoid_such_places_altogether
+      it: Evito del tutto questi luoghi
+      en: Avoid such places altogether
+    - code: this_never_happens_to
+      it: Non mi capita mai
+      en: This never happens to me
+      exclusive: true
+    - code: other
+      it: Altro
+      en: Other
+      free_text: true
+  Q21:
+    type: multi
+    text_en: Places they avoid or only visit when they must
+    persona: V2
+    options:
+    - code: squares
+      it: Piazze
+      en: Squares
+    - code: shopping_streets
+      it: Vie dello shopping
+      en: Shopping streets
+    - code: supermarkets_and_shopping_centres
+      it: Supermercati e centri commerciali
+      en: Supermarkets and shopping centres
+    - code: markets
+      it: Mercati
+      en: Markets
+    - code: stations_and_public_transport
+      it: Stazioni e trasporti pubblici
+      en: Stations and public transport
+    - code: parks
+      it: Parchi
+      en: Parks
+    - code: events_and_festivals
+      it: Eventi e feste
+      en: Events and festivals
+    - code: none
+      it: Nessuno
+      en: None
+      exclusive: true
+    - code: other
+      it: Altro
+      en: Other
+      free_text: true
+  Q22:
+    type: open_text
+    text_en: 'A public space that overwhelms them: what makes it so and what would make it better (optional)'
+    persona: V2
+    note: 'Free text: never translated; given to the persona verbatim, in the language it was written in.'
+part_b:
+  B1:
+    type: single
+    text_en: How well they know this place
+    persona: analysis_only
+    options:
+    - code: often
+      it: Ci vado spesso (ci vivo o lavoro vicino)
+      en: I go there often (I live or work nearby)
+    - code: a_few_times
+      it: Ci sono stat* una o più volte
+      en: I have been there once or a few times
+    - code: never
+      it: Non ci sono mai stat*
+      en: I have never been there
+    note: Familiarity analysis only; personas are not asked B1.
+  B2:
+    type: scale_1_5
+    text_en: How comfortable they would feel spending 20 minutes here (1 = not at all, 5 = very comfortable)
+    json_key: B2_comfort
+  B3:
+    type: grid_1_5
+    text_en: How much each situation would be a problem here (1 = not at all, 5 = very much)
+    json_key: B3_situations
+    rows:
+    - code: sensory_overload
+      it: Troppi stimoli sensoriali (rumore, luce, odori, caldo)
+      en: Too much sensory input (noise, light, smells, heat)
+    - code: crowded_chaotic_narrow
+      it: Luoghi affollati, caotici o stretti
+      en: Crowded, chaotic or narrow places
+    - code: uncertainty
+      it: Incertezza su cosa aspettarsi
+      en: Uncertainty about what to expect
+    - code: no_place_to_retreat
+      it: Mancanza di un posto dove allontanarsi, riposare o riprendersi
+      en: Lack of a place to step away, rest or recover
+  B4:
+    type: multi
+    text_en: Which senses would most influence their experience here, positively or negatively
+    json_key: B4_senses
+    max: 3
+    options:
+    - code: hearing
+      it: Udito (suoni, rumori)
+      en: Hearing (sounds, noise)
+    - code: sight
+      it: Vista (luce, colori, ciò che vedi)
+      en: Sight (light, colours, what you see)
+    - code: smell
+      it: Olfatto (odori, profumi)
+      en: Smell (odours, scents)
+    - code: touch
+      it: Tatto (superfici, caldo o freddo sulla pelle)
+      en: Touch (surfaces, heat or cold on the skin)
+    - code: balance
+      it: Equilibrio (movimento, terreno irregolare, folla in movimento)
+      en: Balance (movement, uneven ground, moving crowds)
+    - code: proprioception
+      it: Percezione del corpo nello spazio (valutare le distanze, urtare cose o persone)
+      en: Sense of your body in space (judging distances, bumping into things or people)
+    - code: interoception
+      it: Sensazioni interne (sete, caldo nel corpo, stanchezza, bisogno del bagno)
+      en: Inner sensations (thirst, feeling hot inside, tiredness, needing the toilet)
+    - code: none_in_particular
+      it: Nessuno in particolare
+      en: None in particular
+      exclusive: true
+  B5:
+    type: multi
+    text_en: Which elements in the photo would bother them here
+    json_key: B5_elements_bother
+    max: 3
+    options:
+    - code: traffic_and_vehicles
+      it: Traffico e veicoli
+      en: Traffic and vehicles
+    - code: bikes_and_scooters
+      it: Biciclette e monopattini
+      en: Bikes and scooters
+    - code: many_people
+      it: Molte persone
+      en: Many people
+    - code: signs_and_ads
+      it: Insegne e pubblicità
+      en: Signs and ads
+    - code: construction_or_roadworks
+      it: Cantieri o lavori in corso
+      en: Construction or roadworks
+    - code: stalls_shops_or_cafes
+      it: Bancarelle, negozi o locali
+      en: Stalls, shops or cafés
+    - code: hard_surfaces
+      it: Superfici dure (asfalto, pietra, cemento)
+      en: Hard surfaces (asphalt, stone, concrete)
+    - code: uneven_ground_or_steps
+      it: Terreno irregolare o gradini
+      en: Uneven ground or steps
+    - code: direct_sun_little_shade
+      it: Sole diretto, poca ombra
+      en: Direct sun, little shade
+    - code: narrow_or_enclosed_space
+      it: Spazio stretto o chiuso
+      en: Narrow or enclosed space
+    - code: space_too_wide_and
+      it: Spazio troppo ampio e aperto
+      en: Space too wide and open
+    - code: artificial_lighting
+      it: Illuminazione artificiale
+      en: Artificial lighting
+    - code: none
+      it: Nessuno
+      en: None
+      exclusive: true
+    - code: other
+      it: Altro
+      en: Other
+      free_text: true
+  B6:
+    type: multi
+    text_en: Which elements in the photo would make them feel good here
+    json_key: B6_elements_feel_good
+    max: 3
+    options:
+    - code: trees_and_greenery
+      it: Alberi e verde
+      en: Trees and greenery
+    - code: water_or_fountains
+      it: Acqua o fontane
+      en: Water or fountains
+    - code: shade
+      it: Ombra
+      en: Shade
+    - code: seating
+      it: Sedute
+      en: Seating
+    - code: sheltered_or_secluded_corners
+      it: Angoli riparati o appartati
+      en: Sheltered or secluded corners
+    - code: wide_open_space
+      it: Spazio ampio e aperto
+      en: Wide, open space
+    - code: pedestrian_area_no_traffic
+      it: Zona pedonale, senza traffico
+      en: Pedestrian area, no traffic
+    - code: lively_busy_place
+      it: Luogo vivace e animato
+      en: Lively, busy place
+    - code: shops_stalls_or_cafes
+      it: Negozi, bancarelle o locali
+      en: Shops, stalls or cafés
+    - code: landmarks_and_signage
+      it: Punti di riferimento e indicazioni
+      en: Landmarks and signage
+    - code: none
+      it: Nessuno
+      en: None
+      exclusive: true
+    - code: other
+      it: Altro
+      en: Other
+      free_text: true
+  B7:
+    type: multi
+    text_en: Which changes would make this place better for them
+    json_key: B7_changes
+    max: 3
+    options:
+    - code: more_trees_and_shade
+      it: Più alberi e ombra
+      en: More trees and shade
+    - code: water
+      it: Acqua (fontane, giochi d'acqua)
+      en: Water (fountains, water features)
+    - code: less_traffic_pedestrian_zone
+      it: Meno traffico / zona pedonale
+      en: Less traffic / pedestrian zone
+    - code: less_noise
+      it: Meno rumore (barriere, superfici più silenziose)
+      en: Less noise (barriers, quieter surfaces)
+    - code: softer_lighting
+      it: Illuminazione più morbida
+      en: Softer lighting
+    - code: fewer_signs_and_ads
+      it: Meno insegne e pubblicità
+      en: Fewer signs and ads
+    - code: quiet_corners_or_rest
+      it: Angoli tranquilli o zone di riposo
+      en: Quiet corners or rest areas
+    - code: more_seating_including_separate
+      it: Più sedute, anche separate
+      en: More seating, including separate seats
+    - code: clearer_signs_and_wayfinding
+      it: Segnaletica e orientamento più chiari
+      en: Clearer signs and wayfinding
+    - code: more_space_to_move
+      it: Più spazio per muoversi (percorsi separati per bici e pedoni)
+      en: More space to move (separate paths for bikes and pedestrians)
+    - code: drinking_fountains_and_public
+      it: Fontanelle e bagni pubblici
+      en: Drinking fountains and public toilets
+    - code: no_change_needed
+      it: Nessun cambiamento
+      en: No change needed
+      exclusive: true
+    - code: other
+      it: Altro
+      en: Other
+      free_text: true
+  B8:
+    type: open_text
+    text_en: Anything to add about this place or the changes (optional)
+    persona: not_asked
+    note: Human-only comment; the persona writes "reasoning" instead.

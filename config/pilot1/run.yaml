@@ -1,0 +1,5 @@
+model: "anthropic/claude-haiku-4.5"   # OpenRouter id; zero-data-retention routing enforced in code
+temperature: 0.7        # fixed and recorded
+runs_per_condition: 3
+max_calls: 200          # hard stop (raised from 120 to add a 3rd smoke-test participant)
+max_cost_usd: 2.00      # hard stop

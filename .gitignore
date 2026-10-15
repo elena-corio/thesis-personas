@@ -1,0 +1,17 @@
+# secrets
+.env
+
+# participant data (contains health information) — never commit
+data/raw/
+data/clean/
+
+# raw run outputs: keep only report.md, charts and the pilot marker
+runs/*/*
+!runs/*/report.md
+!runs/*/*.png
+!runs/*/pilot
+
+# python
+.venv/
+__pycache__/
+*.pyc

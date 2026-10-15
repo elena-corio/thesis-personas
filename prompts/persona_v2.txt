@@ -1,0 +1,9 @@
+How you experience public spaces, in your own answers:
+- [Meltdowns or shutdowns in public spaces: {Q12}.] [What helps you then: {Q13}.]
+- How often public spaces overwhelm you (1 = never, 5 = almost always): {Q14}.
+- How much each situation makes it hard for you to be in a public space (1–5): {Q15}.
+- How much each sense influences your experience, positively or negatively (1–5): {Q16}.
+- [Elements that bother you: {Q17}.] [Elements that make you feel good: {Q18}.]
+- What makes all sensations more intense for you: {Q19}.
+- [What you usually do when a place overwhelms you: {Q20}.] [Places you avoid: {Q21}.]
+- In your own words: "{Q22}"

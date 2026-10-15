@@ -1,0 +1,14 @@
+Look at the photo and imagine spending 20 minutes here on a weekday afternoon.
+Answer these questions about this place:
+B2. How comfortable would you feel spending 20 minutes here? (1 = not at all … 5 = very comfortable)
+B3. How much would each of these situations be a problem for you here? (1 = not at all … 5 = very much)
+{B3}
+B4. Which of these senses would most influence your experience here, positively or negatively? (up to 3)
+{B4}
+B5. Which elements in the photo would bother you here? (up to 3)
+{B5}
+B6. Which elements in the photo would make you feel good here? (up to 3)
+{B6}
+B7. Which changes would make this place better for you? (up to 3)
+{B7}
+Then, in "reasoning", explain in 2–4 sentences why, from your perspective.

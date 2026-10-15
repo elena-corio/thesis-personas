@@ -1,0 +1,8 @@
+pandas
+pyyaml
+openai
+python-dotenv
+jsonschema
+scipy
+matplotlib
+pillow
