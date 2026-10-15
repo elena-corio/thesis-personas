@@ -190,6 +190,16 @@ Baselines for every score:
 
 No conclusions about the hypotheses.
 
+## Pilot participants in the final analysis
+
+Decided on 2026-10-15, before any external pilot answers came in:
+
+- The researcher's own test responses are **not** data. They may stay in the form during the pilot, as a pipeline test alongside the pilot participants, and are deleted from the form (and any linked sheet) before the form is opened to the main sample. They never enter the final analysis.
+- The external pilot uses the v2 form as it will be launched; its first 2–3 respondents are the pilot.
+- If the pilot leads to **no change** in the form (questions, options, photos, consent), the pilot participants' human answers are **included** in the final analysis like any other response.
+- If the pilot leads to **any change** in the form, the changed form is a new version (v3) and the pilot answers are used for the pilot only, not in the final analysis.
+- Fixes to the pipeline only (format, instructions, limits) do not count as a change to the form. Persona answers are regenerated for everyone in the final run, so pilot persona runs are never part of the final analysis.
+
 ## Done when
 
 1. `smoke-test-v1` is tagged and the old run is untouched.
