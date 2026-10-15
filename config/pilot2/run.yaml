@@ -1,0 +1,5 @@
+model: "anthropic/claude-haiku-4.5"   # 5.5 rejects a temperature setting; keep 4.5 so temperature is fixed and recorded
+temperature: 0.7
+runs_per_condition: 2                 # smoke test: B2 identical across runs in 10–11 of 12 places
+max_calls: 200
+max_cost_usd: 2.00

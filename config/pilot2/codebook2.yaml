@@ -1,0 +1,811 @@
+version: '2026-10-15'
+survey: 'v2: 6 places, sense-ordered lists, no senses grid'
+labels_note: 'it / en are the exact form texts (matched by the parser). Personas use en, with the first letter lowercased (except ADHD, PTSD,
+  DCD), or persona_en where given. Google Forms "Other" answers arrive as the typed text: any unmatched value in a question with an "other" option
+  is coded other + text.'
+scenario:
+  it: Guarda la foto e immagina di trascorrere qui 20 minuti in un pomeriggio feriale.
+  en: Look at the photo and imagine spending 20 minutes here on a weekday afternoon.
+places: 6
+senses:
+- hearing
+- sight
+- smell
+- touch_temperature
+- balance
+- body_in_space
+- inner_sensations
+maclennan_factors:
+- sensoryscape
+- space
+- predictability
+- recovery
+persona_versions:
+  V0: 'No persona: the default model answers as "a person".'
+  V1: 'Labels: Q1–Q5 and Q7–Q12 (demographics, health, neurodivergence, meltdowns).'
+  V2: 'Labels + lived experience: everything in V1 plus Q13–Q20 (attention-check row removed).'
+  V3: 'Lived experience only: V0 plus Q13–Q20, without the V1 labels.'
+  tags:
+    labels:
+    - V1
+    - V2
+    sensory:
+    - V2
+    - V3
+    analysis_only: []
+    persona_answers: Part B questions the personas answer
+free_text: 'Q20, B7 and every "Other" text: never translated; kept verbatim with the form language (it/en).'
+consent:
+  type: consent
+  persona: analysis_only
+  options:
+  - code: take_part
+    it: Ho letto e compreso il documento informativo, ho almeno 18 anni e accetto di partecipare.
+    en: I have read and understood the information sheet, I am 18 or older, and I agree to take part.
+  - code: health_ai
+    it: Acconsento al trattamento delle informazioni sulla salute che scelgo di condividere, anche tramite un modello di intelligenza artificiale,
+      solo per questa ricerca e come descritto nel documento informativo.
+    en: I agree to the processing of any health information I choose to share, including by an AI model, for this research only and as described
+      in the information sheet.
+  note: Keep a participant only if both are ticked.
+  title_it: Consenso
+  title_en: Consent
+part_a:
+  Q1:
+    type: single
+    persona: labels
+    options:
+    - code: '18_24'
+      it: 18–24
+      en: 18–24
+    - code: '25_34'
+      it: 25–34
+      en: 25–34
+    - code: '35_44'
+      it: 35–44
+      en: 35–44
+    - code: '45_54'
+      it: 45–54
+      en: 45–54
+    - code: '55_64'
+      it: 55–64
+      en: 55–64
+    - code: 65_plus
+      it: 65 o più
+      en: 65 or older
+    title_it: Quanti anni hai?
+    title_en: How old are you?
+  Q2:
+    type: single
+    persona: labels
+    options:
+    - code: woman
+      it: Donna
+      en: Woman
+    - code: man
+      it: Uomo
+      en: Man
+    - code: non_binary
+      it: Non binario
+      en: Non-binary
+    - code: prefer_not_to_say
+      it: Preferisco non rispondere
+      en: Prefer not to say
+      exclusive: true
+    - code: other
+      it: Altro
+      en: Other
+      free_text: true
+      form: other_option
+    title_it: Qual è il tuo genere?
+    title_en: What is your gender?
+  Q3:
+    type: single
+    persona: labels
+    options:
+    - code: austria
+      it: Austria
+      en: Austria
+    - code: other_european
+      it: Altro paese europeo
+      en: Another European country
+    - code: outside_europe
+      it: Fuori dall'Europa
+      en: Outside Europe
+    - code: prefer_not_to_say
+      it: Preferisco non rispondere
+      en: Prefer not to say
+      exclusive: true
+    title_it: In quale Stato vivi?
+    title_en: Which country do you live in?
+  Q4:
+    type: single
+    persona: labels
+    options:
+    - code: large_city
+      it: Grande città (oltre 500.000 abitanti)
+      en: Large city (over 500,000 inhabitants)
+      persona_en: a large city (over 500,000 inhabitants)
+    - code: medium_city
+      it: Città media (50.000–500.000 abitanti)
+      en: Medium-sized city (50,000–500,000)
+      persona_en: a medium-sized city (50,000–500,000 inhabitants)
+    - code: small_town
+      it: Piccola città (5.000–50.000 abitanti)
+      en: Small town (5,000–50,000)
+      persona_en: a small town (5,000–50,000 inhabitants)
+    - code: village
+      it: Paese o campagna (meno di 5.000 abitanti)
+      en: Village or countryside (under 5,000)
+      persona_en: a village or the countryside
+    - code: no_fixed_place
+      it: Mi sposto spesso / non ho un luogo fisso
+      en: I move around a lot / no fixed place
+      persona_en: no fixed place (you move around a lot)
+    title_it: Che tipo di luogo è quello in cui vivi?
+    title_en: What kind of place do you live in?
+  Q5:
+    type: single
+    persona: labels
+    options:
+    - code: secondary
+      it: Scuola secondaria o inferiore
+      en: Secondary school or less
+    - code: vocational
+      it: Formazione professionale
+      en: Vocational training
+    - code: bachelor
+      it: Laurea triennale
+      en: Bachelor's degree
+    - code: master
+      it: Laurea magistrale o a ciclo unico
+      en: Master's degree
+    - code: phd
+      it: Dottorato di ricerca
+      en: Doctorate (PhD)
+    title_it: Qual è il titolo di studio più alto che hai conseguito?
+    title_en: What is your highest completed level of education?
+  Q6:
+    type: single
+    persona: analysis_only
+    options:
+    - code: lives_there
+      it: Ci vivo ora
+      en: I live there now
+    - code: lived_there
+      it: Ci ho vissuto in passato
+      en: I lived there before
+    - code: visited
+      it: L'ho visitata
+      en: I have visited
+    - code: never
+      it: Non ci sono mai stat*
+      en: I have never been there
+    note: Never given to any persona.
+    title_it: Quanto conosci Vienna?
+    title_en: How well do you know Vienna?
+  Q7:
+    type: multi
+    persona: labels
+    options:
+    - code: hearing_condition
+      it: Acufene, iperacusia o disabilità uditiva
+      en: Tinnitus, hyperacusis or hearing impairment
+      sense: hearing
+    - code: visual_condition
+      it: Fotofobia o disabilità visiva
+      en: Photophobia or visual impairment
+      sense: sight
+    - code: breathing
+      it: Asma, allergie o altre difficoltà respiratorie (es. pollini)
+      en: Asthma, allergies or other breathing difficulties (e.g. pollen)
+      sense: smell
+    - code: chronic_pain_fatigue
+      it: Dolore o stanchezza cronici
+      en: Chronic pain or fatigue
+    - code: mobility
+      it: Difficoltà motorie o a camminare
+      en: Mobility or walking difficulties
+    - code: migraine_epilepsy
+      it: Emicrania o epilessia
+      en: Migraine or epilepsy
+    - code: anxiety_panic_phobia
+      it: Ansia, attacchi di panico o fobie (es. della folla o degli spazi aperti)
+      en: Anxiety, panic attacks or phobias (e.g. of crowds or open spaces)
+    - code: ptsd
+      it: PTSD o CPTSD (disturbo da stress post-traumatico, anche complesso)
+      en: PTSD or CPTSD
+    - code: none
+      it: Nessuna di queste
+      en: None of these
+      exclusive: true
+    - code: prefer_not_to_say
+      it: Preferisco non rispondere
+      en: Prefer not to say
+      exclusive: true
+    - code: other
+      it: Altro
+      en: Other
+      free_text: true
+      form: other_option
+    title_it: Qualcuna di queste condizioni di salute influenza il modo in cui vivi gli spazi pubblici?
+    title_en: Do any of these health conditions affect how you experience public spaces?
+  Q8:
+    type: single
+    persona: labels
+    options:
+    - code: 'yes'
+      it: Sì
+      en: 'Yes'
+    - code: 'no'
+      it: 'No'
+      en: 'No'
+    - code: not_sure
+      it: Non so
+      en: Not sure
+    - code: prefer_not_to_say
+      it: Preferisco non rispondere
+      en: Prefer not to say
+      exclusive: true
+    title_it: Sei una persona autistica, con ADHD o con un'altra forma di neurodivergenza?
+    title_en: Are you autistic, do you have ADHD, or are you neurodivergent in another way?
+  Q9:
+    type: multi
+    persona: labels
+    options:
+    - code: autistic
+      it: Persona autistica
+      en: Autistic person
+      persona_en: autistic
+    - code: adhd
+      it: ADHD
+      en: ADHD
+    - code: dyspraxia
+      it: Disprassia / DCD
+      en: Dyspraxia / DCD
+    - code: tourette
+      it: Sindrome di Tourette o disturbo da tic
+      en: Tourette's or tic disorder
+    - code: sensory_processing
+      it: Differenze nell'elaborazione sensoriale
+      en: Sensory processing differences
+    - code: learning_differences
+      it: Disturbi specifici dell'apprendimento (es. dislessia, discalculia)
+      en: Learning differences (e.g. dyslexia, dyscalculia)
+    - code: not_sure
+      it: Non so
+      en: Not sure
+    - code: prefer_not_to_say
+      it: Preferisco non rispondere
+      en: Prefer not to say
+      exclusive: true
+    - code: other
+      it: Altro
+      en: Other
+      free_text: true
+      form: other_option
+    title_it: Quali di questi termini ti descrivono?
+    title_en: Which of these terms describe you?
+    asked_if: Q8 in [yes, not_sure]
+  Q10:
+    type: single
+    persona: labels
+    options:
+    - code: formal_diagnosis
+      it: Sì, ho una diagnosi formale
+      en: Yes, formally diagnosed
+      persona_en: a formal diagnosis
+    - code: waiting_assessment
+      it: Sono in attesa di una valutazione
+      en: Waiting for an assessment
+      persona_en: you are waiting for an assessment
+    - code: self_identified
+      it: Mi autoidentifico
+      en: Self-identified
+      persona_en: self-identification
+    - code: suspect
+      it: Ho solo un sospetto
+      en: I only suspect it
+      persona_en: only a suspicion
+    - code: prefer_not_to_say
+      it: Preferisco non rispondere
+      en: Prefer not to say
+      exclusive: true
+    title_it: La tua risposta alla domanda precedente si basa su una diagnosi formale?
+    title_en: Is your answer to the previous question based on a formal diagnosis?
+    asked_if: Q8 in [yes, not_sure]
+  Q11:
+    type: single
+    persona: labels
+    options:
+    - code: none
+      it: Nessuno
+      en: None
+    - code: some
+      it: Un po'
+      en: Some
+    - code: a_lot
+      it: Molto
+      en: A lot
+    - code: a_great_deal
+      it: Moltissimo
+      en: A great deal
+    - code: prefer_not_to_say
+      it: Preferisco non rispondere
+      en: Prefer not to say
+      exclusive: true
+    title_it: Di quanto supporto hai bisogno nella vita quotidiana a causa della tua condizione?
+    title_en: How much support do you need in daily life because of your condition?
+    asked_if: Q8 in [yes, not_sure]
+  Q12:
+    type: single
+    persona: labels
+    options:
+    - code: never
+      it: Mai
+      en: Never
+    - code: sometimes
+      it: Qualche volta
+      en: Sometimes
+    - code: often
+      it: Spesso
+      en: Often
+    - code: prefer_not_to_say
+      it: Preferisco non rispondere
+      en: Prefer not to say
+      exclusive: true
+    note: Counts as a label (V1), not as lived experience, so V3 stays free of clinical labels.
+    title_it: Negli spazi pubblici, ti capita di avere un meltdown o uno shutdown (crisi da sovraccarico sensoriale o emotivo)?
+    title_en: In public spaces, do you ever experience a meltdown or shutdown (a crisis from sensory or emotional overload)?
+    asked_if: Q8 in [yes, not_sure]
+  Q13:
+    type: scale_1_5
+    persona: sensory
+    labels:
+      it:
+      - Mai
+      - Quasi sempre
+      en:
+      - Never
+      - Almost always
+    title_it: Quanto spesso ti senti sopraffatt* negli spazi pubblici?
+    title_en: How often do you feel overwhelmed in public spaces?
+  Q14:
+    type: grid_1_5
+    persona: sensory
+    rows:
+    - code: sensory_overload
+      it: Troppi stimoli sensoriali, anche naturali (suoni, luce, odori, caldo o freddo)
+      en: Too much sensory input, natural or not (sounds, light, smells, heat or cold)
+      factor: sensoryscape
+    - code: space_narrow_or_wide
+      it: Spazi stretti, affollati o caotici, oppure troppo ampi e isolati
+      en: Narrow, crowded or chaotic spaces, or spaces too wide and isolated
+      factor: space
+    - code: uncertainty
+      it: Incertezza su cosa aspettarsi (luoghi sconosciuti o che cambiano)
+      en: Uncertainty about what to expect (unfamiliar or changing places)
+      factor: predictability
+    - code: no_place_to_retreat
+      it: Mancanza di un posto dove allontanarsi, riposare o riprendersi
+      en: Lack of a place to step away, rest or recover
+      factor: recovery
+    attention_check:
+      it: 'Controllo: per questa riga seleziona 2'
+      en: 'Check: for this row, select 2'
+      expected: 2
+      note: Last row. Record pass/fail, then drop it from the persona.
+    title_it: Quanto ciascuna di queste situazioni ti rende difficile stare in uno spazio pubblico?
+    title_en: How much does each of these situations make it hard for you to be in a public space?
+  Q15:
+    type: multi
+    persona: sensory
+    options:
+    - code: hearing
+      it: 'Rumore: traffico, sirene, cantieri, tante voci'
+      en: 'Noise: traffic, sirens, construction, many voices'
+      sense: hearing
+    - code: sight
+      it: Luce forte o tremolante, riflessi, insegne e confusione visiva
+      en: Strong or flickering light, glare, signs and visual clutter
+      sense: sight
+    - code: smell
+      it: 'Odori sgradevoli: fumo, gas di scarico, rifiuti, cibo'
+      en: 'Unpleasant smells: smoke, exhaust, rubbish, food'
+      sense: smell
+    - code: touch_temperature
+      it: Caldo senza ombra, freddo, vento, superfici sgradevoli
+      en: Heat without shade, cold, wind, unpleasant surfaces
+      sense: touch_temperature
+    - code: balance
+      it: Terreno irregolare, gradini, pendenze
+      en: Uneven ground, steps, slopes
+      sense: balance
+    - code: body_in_space
+      it: Folla, biciclette o persone che passano vicino
+      en: Crowds, bikes or people passing close
+      sense: body_in_space
+    - code: inner_sensations
+      it: Nessun posto per sedersi, bere o andare in bagno
+      en: Nowhere to sit, drink or find a toilet
+      sense: inner_sensations
+    - code: none
+      it: Nessuno
+      en: None
+      exclusive: true
+    - code: other
+      it: Altro
+      en: Other
+      free_text: true
+      form: other_option
+    title_it: Quali di questi elementi ti disturbano?
+    title_en: Which of these elements bother you?
+  Q16:
+    type: multi
+    persona: sensory
+    options:
+    - code: hearing
+      it: 'Suoni piacevoli: musica, acqua, uccelli, chiacchiericcio vivace'
+      en: 'Pleasant sounds: music, water, birds, lively chatter'
+      sense: hearing
+    - code: sight
+      it: Colori, luci, cose da guardare
+      en: Colours, lights, things to look at
+      sense: sight
+    - code: smell
+      it: 'Profumi piacevoli: cibo, mercato, fiori, piante'
+      en: 'Pleasant smells: food, market, flowers, plants'
+      sense: smell
+    - code: touch_temperature
+      it: Sole e calore, ombra, materiali piacevoli da toccare
+      en: Sun and warmth, shade, materials pleasant to touch
+      sense: touch_temperature
+    - code: balance
+      it: Luoghi dove dondolarsi, arrampicarsi o muoversi
+      en: Places to swing, climb or move
+      sense: balance
+    - code: body_in_space
+      it: Spazio per muoversi liberamente
+      en: Room to move freely
+      sense: body_in_space
+    - code: inner_sensations
+      it: Posti dove riposare, bere o mangiare
+      en: Places to rest, drink or eat
+      sense: inner_sensations
+    - code: none
+      it: Nessuno
+      en: None
+      exclusive: true
+    - code: other
+      it: Altro
+      en: Other
+      free_text: true
+      form: other_option
+    title_it: Quali di questi elementi ti fanno stare bene?
+    title_en: Which of these elements make you feel good?
+  Q17:
+    type: multi
+    persona: sensory
+    options:
+    - code: squares
+      it: Piazze
+      en: Squares
+    - code: parks
+      it: Parchi
+      en: Parks
+    - code: shopping_streets
+      it: Vie dello shopping
+      en: Shopping streets
+    - code: markets
+      it: Mercati
+      en: Markets
+    - code: stations_transport
+      it: Stazioni e trasporti pubblici
+      en: Stations and public transport
+    - code: outdoor_events
+      it: Eventi, concerti o festival all'aperto
+      en: Outdoor events, concerts or festivals
+    - code: none
+      it: Nessuno
+      en: None
+      exclusive: true
+    - code: other
+      it: Altro
+      en: Other
+      free_text: true
+      form: other_option
+    title_it: Quali luoghi eviti, o frequenti solo quando devi, per come ti fanno sentire?
+    title_en: Which places do you avoid, or only visit when you must, because of how they make you feel?
+  Q18:
+    type: multi
+    persona: sensory
+    options:
+    - code: tiredness
+      it: Stanchezza
+      en: Tiredness
+    - code: journey_effort
+      it: Fatica del viaggio
+      en: Effort of the journey
+    - code: hurry
+      it: Fretta o ritardo
+      en: Being in a hurry or late
+    - code: stress_anxiety
+      it: Stress o ansia
+      en: Stress or anxiety
+    - code: feeling_unsafe
+      it: Sensazione di non essere al sicuro
+      en: Feeling unsafe
+    - code: new_places
+      it: Luoghi nuovi
+      en: New places
+    - code: none
+      it: Nessuna
+      en: None
+      exclusive: true
+    - code: other
+      it: Altro
+      en: Other
+      free_text: true
+      form: other_option
+    title_it: Cosa rende tutte le sensazioni più intense per te?
+    title_en: What makes all sensations more intense for you?
+  Q19:
+    type: multi
+    persona: sensory
+    options:
+    - code: quieter_spot
+      it: Cercare un posto più tranquillo
+      en: Looking for a quieter spot
+    - code: headphones_sunglasses
+      it: Usare cuffie, tappi per le orecchie o occhiali da sole
+      en: Using headphones, earplugs or sunglasses
+    - code: sit_lie_down
+      it: Sedermi o sdraiarmi
+      en: Sitting or lying down
+    - code: move
+      it: Muovermi (camminare, dondolarmi)
+      en: Moving (walking, rocking)
+    - code: drink_eat
+      it: Bere o mangiare qualcosa
+      en: Drinking or eating something
+    - code: help_from_someone
+      it: Ricevere aiuto da una persona di fiducia o da chi sa come aiutarmi
+      en: Getting help from someone I trust or who knows how to help
+    - code: doesnt_happen
+      it: Non mi capita
+      en: This doesn't happen to me
+      exclusive: true
+    - code: prefer_not_to_say
+      it: Preferisco non rispondere
+      en: Prefer not to say
+      exclusive: true
+    - code: other
+      it: Altro
+      en: Other
+      free_text: true
+      form: other_option
+    title_it: Quando un luogo ti fa sentire sopraffatt*, cosa ti aiuta?
+    title_en: When a place makes you feel overwhelmed, what helps you?
+  Q20:
+    type: open_text
+    persona: sensory
+    required: false
+    note: 'Free text: never translated; given to the persona verbatim, in the language it was written in.'
+    title_it: Descrivi uno spazio pubblico che ti fa sentire sopraffatt*. Cosa te lo fa vivere così, e cosa lo renderebbe migliore?
+    title_en: Describe a public space that makes you feel overwhelmed. What makes it feel that way, and what would make it better?
+part_b:
+  B1:
+    type: single
+    persona: analysis_only
+    options:
+    - code: often
+      it: Ci vado spesso (ci vivo o lavoro vicino)
+      en: I go there often (I live or work nearby)
+    - code: a_few_times
+      it: Ci sono stat* una o più volte
+      en: I have been there once or a few times
+    - code: never
+      it: Non ci sono mai stat*
+      en: I have never been there
+    note: Familiarity analysis only; personas are not asked B1.
+    title_it: Conosci questo luogo?
+    title_en: How well do you know this place?
+  B2:
+    type: scale_1_5
+    persona: persona_answers
+    labels:
+      it:
+      - Per niente
+      - Moltissimo
+      en:
+      - Not at all
+      - Very comfortable
+    json_key: B2_comfort
+    outcome: secondary
+    title_it: Quanto ti sentiresti a tuo agio a passare 20 minuti qui?
+    title_en: How comfortable would you feel spending 20 minutes here?
+  B3:
+    type: grid_1_5
+    persona: persona_answers
+    rows:
+    - code: sensory_overload
+      it: Troppi stimoli sensoriali, anche naturali (suoni, luce, odori, caldo o freddo)
+      en: Too much sensory input, natural or not (sounds, light, smells, heat or cold)
+      factor: sensoryscape
+    - code: space_narrow_or_wide
+      it: Spazi stretti, affollati o caotici, oppure troppo ampi e isolati
+      en: Narrow, crowded or chaotic spaces, or spaces too wide and isolated
+      factor: space
+    - code: uncertainty
+      it: Incertezza su cosa aspettarsi
+      en: Uncertainty about what to expect
+      factor: predictability
+    - code: no_place_to_retreat
+      it: Mancanza di un posto dove allontanarsi, riposare o riprendersi
+      en: Lack of a place to step away, rest or recover
+      factor: recovery
+    json_key: B3_situations
+    outcome: primary
+    copy_baseline: Q14
+    title_it: Quanto ciascuna di queste situazioni sarebbe un problema per te qui?
+    title_en: How much would each of these situations be a problem for you here?
+  B4:
+    type: multi
+    persona: persona_answers
+    options:
+    - code: hearing
+      it: Fonti di rumore (traffico, persone, cantieri)
+      en: Sources of noise (traffic, people, construction)
+      sense: hearing
+    - code: sight
+      it: 'Confusione visiva: insegne, pubblicità, luci forti'
+      en: 'Visual clutter: signs, ads, bright lights'
+      sense: sight
+    - code: smell
+      it: Fonti di odori (traffico, rifiuti, bancarelle di cibo)
+      en: Sources of smells (traffic, rubbish, food stalls)
+      sense: smell
+    - code: touch_temperature
+      it: Sole senza ombra, superfici dure (asfalto, pietra)
+      en: Sun without shade, hard surfaces (asphalt, stone)
+      sense: touch_temperature
+    - code: balance
+      it: Terreno irregolare, gradini o pendenze
+      en: Uneven ground, steps or slopes
+      sense: balance
+    - code: body_in_space
+      it: Folla o biciclette vicine; spazio stretto o troppo aperto
+      en: Crowds or bikes close; narrow or too open space
+      sense: body_in_space
+    - code: inner_sensations
+      it: Nessun posto per sedersi, bere o andare in bagno
+      en: Nowhere to sit, drink or find a toilet
+      sense: inner_sensations
+    - code: none
+      it: Nessuno
+      en: None
+      exclusive: true
+    - code: other
+      it: Altro
+      en: Other
+      free_text: true
+      form: other_option
+    min: 1
+    max: 3
+    json_key: B4_elements_bother
+    copy_baseline: Q15
+    title_it: Quali elementi della foto ti disturberebbero qui?
+    title_en: Which elements in the photo would bother you here?
+  B5:
+    type: multi
+    persona: persona_answers
+    options:
+    - code: hearing
+      it: Silenzio o suoni piacevoli (acqua, uccelli)
+      en: Quiet, or pleasant sounds (water, birds)
+      sense: hearing
+    - code: sight
+      it: Una vista calma, colori o verde da guardare
+      en: A calm view, colours or greenery to look at
+      sense: sight
+    - code: smell
+      it: Piante, fiori o aria fresca
+      en: Plants, flowers or fresh air
+      sense: smell
+    - code: touch_temperature
+      it: Ombra, materiali piacevoli (legno, erba)
+      en: Shade, pleasant materials (wood, grass)
+      sense: touch_temperature
+    - code: balance
+      it: Percorsi lisci o luoghi per muoversi (altalene, arrampicata)
+      en: Smooth paths, or places to move (swings, climbing)
+      sense: balance
+    - code: body_in_space
+      it: Spazio per muoversi liberamente, angoli riparati
+      en: Room to move freely, sheltered corners
+      sense: body_in_space
+    - code: inner_sensations
+      it: Sedute, fontanelle, posti per riposare
+      en: Seating, fountains, places to rest
+      sense: inner_sensations
+    - code: none
+      it: Nessuno
+      en: None
+      exclusive: true
+    - code: other
+      it: Altro
+      en: Other
+      free_text: true
+      form: other_option
+    min: 1
+    max: 3
+    json_key: B5_elements_feel_good
+    copy_baseline: Q16
+    title_it: Quali elementi della foto ti farebbero stare bene qui?
+    title_en: Which elements in the photo would make you feel good here?
+  B6:
+    type: multi
+    persona: persona_answers
+    options:
+    - code: hearing
+      it: Meno rumore, o suoni piacevoli (giochi d'acqua)
+      en: Less noise, or pleasant sounds (water features)
+      sense: hearing
+    - code: sight
+      it: Meno confusione visiva (insegne, pubblicità, luci forti)
+      en: Less visual clutter (signs, ads, harsh lighting)
+      sense: sight
+    - code: smell
+      it: Più pulizia, meno odori sgradevoli
+      en: Cleaner, fewer unpleasant smells
+      sense: smell
+    - code: touch_temperature
+      it: Più alberi, verde e ombra
+      en: More trees, greenery and shade
+      sense: touch_temperature
+    - code: balance
+      it: Terreno regolare, meno gradini
+      en: Even ground, fewer steps
+      sense: balance
+    - code: body_in_space
+      it: Più spazio per muoversi (percorsi separati per bici e pedoni)
+      en: More space to move (separate paths for bikes and pedestrians)
+      sense: body_in_space
+    - code: inner_sensations
+      it: Fontanelle e bagni pubblici
+      en: Drinking fountains and public toilets
+      sense: inner_sensations
+    - code: space
+      it: Meno traffico / zona pedonale
+      en: Less traffic / pedestrian zone
+      factor: space
+    - code: predictability
+      it: Segnaletica e orientamento più chiari
+      en: Clearer signs and wayfinding
+      factor: predictability
+    - code: recovery
+      it: Angoli tranquilli con sedute, per riposare
+      en: Quiet corners with seating, to rest
+      factor: recovery
+    - code: no_change_needed
+      it: Nessun cambiamento
+      en: No change needed
+      exclusive: true
+    - code: other
+      it: Altro
+      en: Other
+      free_text: true
+      form: other_option
+    min: 1
+    max: 3
+    json_key: B6_changes
+    title_it: Quali cambiamenti renderebbero questo luogo migliore per te?
+    title_en: Which changes would make this place better for you?
+  B7:
+    type: open_text
+    persona: not_asked
+    required: false
+    note: Human-only comment, never translated; the persona writes "reasoning" instead.
+    title_it: Vuoi aggiungere qualcosa su questo luogo o sui cambiamenti?
+    title_en: Anything to add about this place or the changes?
+remap: {}
